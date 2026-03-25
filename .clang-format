@@ -2,3 +2,6 @@
 BasedOnStyle: Google
 IndentWidth: 4
 AlignAfterOpenBracket: BlockIndent
+AlignConsecutiveMacros:
+  Enabled: true
+SortIncludes: Never
