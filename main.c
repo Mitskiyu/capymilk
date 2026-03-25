@@ -1,10 +1,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define UNICODE
-#include <windows.h>
-#include <gl/gl.h>
-
 typedef int8_t i8;
 typedef int16_t i16;
 typedef int32_t i32;
@@ -18,6 +14,11 @@ typedef i8 b8;
 typedef i32 b32;
 
 typedef float f32;
+
+#define UNICODE
+#include <windows.h>
+#include <gl/gl.h>
+#include "opengl.h"
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
@@ -107,7 +108,16 @@ int main(void) {
             dummy_dc, pf_attribs, NULL, 1, &pixel_format, &num_formats
         );
 
+        HINSTANCE gl_dll = LoadLibraryA("opengl32.dll");
+        // clang-format off
         // Load OpenGL funcs
+        #define X(ret, name, args)                                       \
+            gl##name = (gl_##name##_func*)wglGetProcAddress("gl" #name); \
+            if (!gl##name)                                               \
+                gl##name = (gl_##name##_func*)GetProcAddress(gl_dll, "gl" #name);
+        #include "opengl_xlist.h"
+        #undef X
+        // clang-format on
 
         wglMakeCurrent(dummy_dc, NULL);
         wglDeleteContext(dummy_gl_context);
@@ -155,6 +165,7 @@ int main(void) {
     b32 is_running = true;
     SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)&is_running);
 
+    glClearColor(0.5, 0.0, 0.5, 1.0);
     while (is_running) {
         MSG msg = {0};
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -163,6 +174,7 @@ int main(void) {
         }
 
         // Draw
+        glClear(GL_COLOR_BUFFER_BIT);
 
         SwapBuffers(dc);
     }
