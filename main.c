@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #define UNICODE
 #include <windows.h>
 #include <gl/gl.h>
@@ -32,6 +34,26 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 #define CLASS_NAME       L"class_name"
 
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
+
+typedef struct {
+    f32 x, y, z;
+} vertex;
+
+const char* vert_shader_source =
+    "#version 450\n"
+    "layout (location = 0) in vec3 a_pos;\n"
+    "void main()\n"
+    "{\n"
+    "gl_Position = vec4(a_pos, 1.0);\n"
+    "}\n\0";
+
+const char* frag_shader_source =
+    "#version 450\n"
+    "out vec4 frag_color;\n"
+    "void main()\n"
+    "{\n"
+    "frag_color = vec4(1.0f, 0.5f, 0.5f, 1.0f);\n"
+    "}\n\0";
 
 int main(void) {
     HINSTANCE mod_handle = GetModuleHandle(NULL);
@@ -144,8 +166,58 @@ int main(void) {
     HGLRC gl_ctx = wglCreateContextAttribsARB(dc, NULL, ctx_attribs);
     wglMakeCurrent(dc, gl_ctx);
 
-    const char* v = (const char*)glGetString(GL_VERSION);
-    OutputDebugStringA(v);
+    u32 shader_program = 0;
+    {
+        i32 ok = 0;
+        char info_log[512];
+
+        GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertex_shader, 1, &vert_shader_source, NULL);
+        glCompileShader(vertex_shader);
+        glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            glGetShaderInfoLog(vertex_shader, 512, NULL, info_log);
+            printf("vertex shader failed to compile: %s\n", info_log);
+        }
+
+        GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment_shader, 1, &frag_shader_source, NULL);
+        glCompileShader(fragment_shader);
+        glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            glGetShaderInfoLog(fragment_shader, 512, NULL, info_log);
+            printf("fragment shader failed to compile: %s\n", info_log);
+        }
+
+        shader_program = glCreateProgram();
+        glAttachShader(shader_program, vertex_shader);
+        glAttachShader(shader_program, fragment_shader);
+        glLinkProgram(shader_program);
+        glGetProgramiv(shader_program, GL_LINK_STATUS, &ok);
+        if (!ok) {
+            glGetProgramInfoLog(shader_program, 512, NULL, info_log);
+            printf("shader program failed to link: %s\n", info_log);
+        }
+
+        glDeleteShader(vertex_shader);
+        glDeleteShader(fragment_shader);
+    }
+
+    GLuint vbo = 0, vao = 0;
+    {
+        glCreateBuffers(1, &vbo);
+        glCreateVertexArrays(1, &vao);
+
+        const vertex vertices[] = {
+            {-0.5f, -0.5f, 0.0f}, {0.5f, -0.5f, 0.0f}, {0.0f, 0.5f, 0.0f}
+        };
+        glNamedBufferStorage(vbo, sizeof(vertices), vertices, 0);
+
+        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex));
+        glVertexArrayAttribBinding(vao, 0, 0);
+        glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
+        glEnableVertexArrayAttrib(vao, 0);
+    }
 
     b32 is_running = true;
     SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)&is_running);
@@ -161,12 +233,13 @@ int main(void) {
         // Draw
         glClear(GL_COLOR_BUFFER_BIT);
 
+        glBindVertexArray(vao);
+        glUseProgram(shader_program);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
         SwapBuffers(dc);
     }
 
-    ReleaseDC(window, dc);
-    DestroyWindow(window);
-    UnregisterClassW(CLASS_NAME, mod_handle);
     return 0;
 }
 
