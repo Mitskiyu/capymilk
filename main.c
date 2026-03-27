@@ -126,6 +126,7 @@ int main(void) {
         #undef X
         // clang-format on
 
+        FreeLibrary(gl_dll);
         wglMakeCurrent(dummy_dc, NULL);
         wglDeleteContext(dummy_gl_context);
         ReleaseDC(dummy_wnd, dummy_dc);
@@ -164,7 +165,9 @@ int main(void) {
     // clang-format on
 
     HGLRC gl_ctx = wglCreateContextAttribsARB(dc, NULL, ctx_attribs);
-    wglMakeCurrent(dc, gl_ctx);
+    if (!gl_ctx) return 1;  // log
+    b32 ok = wglMakeCurrent(dc, gl_ctx);
+    if (!ok) return 1;  // log
 
     u32 shader_program = 0;
     {
