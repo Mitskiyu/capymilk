@@ -39,6 +39,13 @@ typedef struct {
     f32 x, y, z;
 } vertex;
 
+typedef struct {
+    b32 is_running;
+    GLuint vao;
+    GLuint shader_program;
+    HDC dc;
+} state;
+
 const char* vert_shader_source =
     "#version 450\n"
     "layout (location = 0) in vec3 a_pos;\n"
@@ -222,11 +229,16 @@ int main(void) {
         glEnableVertexArrayAttrib(vao, 0);
     }
 
-    b32 is_running = true;
-    SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)&is_running);
+    state s = {
+        .is_running = true,
+        .shader_program = shader_program,
+        .vao = vao,
+        .dc = dc
+    };
+    SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)&s);
 
     glClearColor(0.5, 0.0, 0.5, 1.0);
-    while (is_running) {
+    while (s.is_running) {
         MSG msg = {0};
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
@@ -236,21 +248,35 @@ int main(void) {
         // Draw
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glBindVertexArray(vao);
-        glUseProgram(shader_program);
+        glBindVertexArray(s.vao);
+        glUseProgram(s.shader_program);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        SwapBuffers(dc);
+        SwapBuffers(s.dc);
     }
 
     return 0;
 }
 
 static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
+    state* s = (state*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!s) return DefWindowProcW(hwnd, umsg, wparam, lparam);
+
     switch (umsg) {
+        case WM_SIZE: {
+            u32 width = LOWORD(lparam);
+            u32 height = HIWORD(lparam);
+            glViewport(0, 0, width, height);
+
+            glClear(GL_COLOR_BUFFER_BIT);
+            glBindVertexArray(s->vao);
+            glUseProgram(s->shader_program);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+
+            SwapBuffers(s->dc);
+        } break;
         case WM_CLOSE: {
-            b32* is_running = (b32*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-            if (is_running) *is_running = false;
+            s->is_running = false;
         } break;
     }
 
