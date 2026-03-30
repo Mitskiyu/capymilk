@@ -19,4 +19,4 @@ X(void,   GetProgramInfoLog,        (GLuint program, GLsizei bufSize, GLsizei *l
 X(void,   DeleteShader,             (GLuint shader))
 X(void,   BindVertexArray,          (GLuint array))
 X(void,   UseProgram,               (GLuint program))
-X(void,   ViewPort,                 (GLint x, GLint y, GLsizei width, GLsizei height))
+X(void,   Viewport,                 (GLint x, GLint y, GLsizei width, GLsizei height))
