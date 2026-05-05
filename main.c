@@ -33,6 +33,8 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
+#define NUM_PTS 10000
+
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 typedef struct {
@@ -218,9 +220,15 @@ int main(void) {
         glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
 
-        const vertex vertices[] = {
-            {-0.5f, -0.5f, 0.0f}, {0.5f, -0.5f, 0.0f}, {0.0f, 0.5f, 0.0f}
-        };
+        vertex vertices[NUM_PTS] = {0};
+        for (size_t i = 0; i < NUM_PTS; i++) {
+            float step = i * (360.0f / NUM_PTS);
+            float radian = step * (PI / 180.0f);
+            vertices[i].x = cosf(radian) * 0.5f;
+            vertices[i].y = sinf(radian) * 0.5f;
+            vertices[i].z = 0.0f;
+        }
+
         glNamedBufferStorage(vbo, sizeof(vertices), vertices, 0);
 
         glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex));
@@ -250,7 +258,7 @@ int main(void) {
 
         glBindVertexArray(s.vao);
         glUseProgram(s.shader_program);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawArrays(GL_POINTS, 0, NUM_PTS);
 
         SwapBuffers(s.dc);
     }
@@ -271,7 +279,7 @@ static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
             glClear(GL_COLOR_BUFFER_BIT);
             glBindVertexArray(s->vao);
             glUseProgram(s->shader_program);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glDrawArrays(GL_POINTS, 0, NUM_PTS);
 
             SwapBuffers(s->dc);
         } break;
