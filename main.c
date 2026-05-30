@@ -60,6 +60,7 @@ typedef struct {
 
 platform_t platform_create(void);
 renderer_t renderer_create(void);
+void renderer_draw(renderer_t *renderer);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 const char* vert_shader_source =
@@ -101,11 +102,7 @@ int main(void) {
         }
 
         // Draw
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glBindVertexArray(renderer.vao);
-        glUseProgram(renderer.shader_program);
-        glDrawArrays(GL_POINTS, 0, NUM_PTS);
+        renderer_draw(&renderer);
 
         SwapBuffers(platform.device_ctx);
     }
@@ -305,6 +302,13 @@ static renderer_t renderer_create(void) {
     return renderer;
 }
 
+static void renderer_draw(renderer_t *renderer) {
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindVertexArray(renderer->vao);
+    glUseProgram(renderer->shader_program);
+    glDrawArrays(GL_POINTS, 0, NUM_PTS);
+}
+
 static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
     app_t* app = (app_t*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!app) return DefWindowProcW(hwnd, umsg, wparam, lparam);
@@ -315,10 +319,7 @@ static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
             u32 height = HIWORD(lparam);
             glViewport(0, 0, width, height);
 
-            glClear(GL_COLOR_BUFFER_BIT);
-            glBindVertexArray(app->renderer->vao);
-            glUseProgram(app->renderer->shader_program);
-            glDrawArrays(GL_POINTS, 0, NUM_PTS);
+            renderer_draw(app->renderer);
 
             SwapBuffers(app->platform->device_ctx);
         } break;
