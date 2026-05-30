@@ -35,18 +35,32 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 
 #define NUM_PTS 10000
 
-LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
-
 typedef struct {
     f32 x, y, z;
 } vertex;
 
 typedef struct {
-    b32 is_running;
+    HINSTANCE mod_handle;
+    HWND      window;
+    HDC       device_ctx;
+    HGLRC     gl_ctx;
+} platform_t;
+
+typedef struct {
     GLuint vao;
+    GLuint vbo;
     GLuint shader_program;
-    HDC dc;
-} state;
+} renderer_t;
+
+typedef struct {
+    b32        is_running;
+    platform_t *platform;
+    renderer_t *renderer;
+} app_t;
+
+platform_t platform_create(void);
+renderer_t renderer_create(void);
+LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 const char* vert_shader_source =
     "#version 450\n"
@@ -65,22 +79,58 @@ const char* frag_shader_source =
     "}\n\0";
 
 int main(void) {
+    platform_t platform = platform_create();
+    if (!platform.window) return 1;
+
+    renderer_t renderer = renderer_create();
+
+    app_t app = {
+        .is_running = true,
+        .platform = &platform,
+        .renderer = &renderer,
+    };
+
+    SetWindowLongPtrW(platform.window, GWLP_USERDATA, (LONG_PTR)&app);
+
+    glClearColor(0.5, 0.0, 0.5, 1.0);
+    while (app.is_running) {
+        MSG msg = {0};
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+
+        // Draw
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glBindVertexArray(renderer.vao);
+        glUseProgram(renderer.shader_program);
+        glDrawArrays(GL_POINTS, 0, NUM_PTS);
+
+        SwapBuffers(platform.device_ctx);
+    }
+
+    return 0;
+}
+
+static platform_t platform_create(void) {
+    platform_t platform = {0};
+
     HINSTANCE mod_handle = GetModuleHandle(NULL);
     i32 pixel_format = 0;
-
     {
         WNDCLASSW dummy_wnd_class = {
             .lpfnWndProc = DefWindowProc,
             .hInstance = mod_handle,
             .lpszClassName = DUMMY_CLASS_NAME
         };
-        if (!RegisterClassW(&dummy_wnd_class)) return 1;  // log
+        if (!RegisterClassW(&dummy_wnd_class)) return platform;  // log
 
         HWND dummy_wnd = CreateWindowW(
             DUMMY_CLASS_NAME, L"", WS_TILEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
             CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, mod_handle, NULL
         );
-        if (!dummy_wnd) return 1;
+        if (!dummy_wnd) return platform;
 
         HDC dummy_dc = GetDC(dummy_wnd);
 
@@ -97,7 +147,7 @@ int main(void) {
         SetPixelFormat(dummy_dc, pf, &pfd);
 
         HGLRC dummy_gl_context = wglCreateContext(dummy_dc);
-        if (!dummy_gl_context) return 1;  // log
+        if (!dummy_gl_context) return platform;  // log
 
         wglMakeCurrent(dummy_dc, dummy_gl_context);
 
@@ -150,14 +200,14 @@ int main(void) {
         .lpszClassName = CLASS_NAME,
         .hCursor = LoadCursorW(0, IDC_ARROW)
     };
-    if (!RegisterClassW(&wnd_class)) return 1;  // log
+    if (!RegisterClassW(&wnd_class)) return platform;  // log
 
     HWND window = CreateWindowExW(
         0, CLASS_NAME, L"Capymilk", WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, mod_handle,
         NULL
     );
-    if (!window) return 1;  // log
+    if (!window) return platform;  // log
 
     HDC dc = GetDC(window);
 
@@ -174,11 +224,22 @@ int main(void) {
     // clang-format on
 
     HGLRC gl_ctx = wglCreateContextAttribsARB(dc, NULL, ctx_attribs);
-    if (!gl_ctx) return 1;  // log
+    if (!gl_ctx) return platform;  // log
     b32 ok = wglMakeCurrent(dc, gl_ctx);
-    if (!ok) return 1;  // log
+    if (!ok) return platform;  // log
+    
+    platform.mod_handle = mod_handle;
+    platform.window = window;
+    platform.device_ctx = dc;
+    platform.gl_ctx = gl_ctx;
 
-    u32 shader_program = 0;
+    return platform;
+}
+
+static renderer_t renderer_create(void) {
+    renderer_t renderer = {0};
+
+    GLuint shader_program = 0;
     {
         i32 ok = 0;
         char info_log[512];
@@ -237,38 +298,16 @@ int main(void) {
         glEnableVertexArrayAttrib(vao, 0);
     }
 
-    state s = {
-        .is_running = true,
-        .shader_program = shader_program,
-        .vao = vao,
-        .dc = dc
-    };
-    SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)&s);
+    renderer.shader_program = shader_program;
+    renderer.vao = vao;
+    renderer.vbo = vbo;
 
-    glClearColor(0.5, 0.0, 0.5, 1.0);
-    while (s.is_running) {
-        MSG msg = {0};
-        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-
-        // Draw
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glBindVertexArray(s.vao);
-        glUseProgram(s.shader_program);
-        glDrawArrays(GL_POINTS, 0, NUM_PTS);
-
-        SwapBuffers(s.dc);
-    }
-
-    return 0;
+    return renderer;
 }
 
 static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
-    state* s = (state*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    if (!s) return DefWindowProcW(hwnd, umsg, wparam, lparam);
+    app_t* app = (app_t*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!app) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
     switch (umsg) {
         case WM_SIZE: {
@@ -277,14 +316,14 @@ static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
             glViewport(0, 0, width, height);
 
             glClear(GL_COLOR_BUFFER_BIT);
-            glBindVertexArray(s->vao);
-            glUseProgram(s->shader_program);
+            glBindVertexArray(app->renderer->vao);
+            glUseProgram(app->renderer->shader_program);
             glDrawArrays(GL_POINTS, 0, NUM_PTS);
 
-            SwapBuffers(s->dc);
+            SwapBuffers(app->platform->device_ctx);
         } break;
         case WM_CLOSE: {
-            s->is_running = false;
+            app->is_running = false;
         } break;
     }
 
