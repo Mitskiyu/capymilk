@@ -36,6 +36,8 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 #define NUM_PTS      2000
 #define NUM_CIRCLES  25
 #define RAD_GALAXY   13000.0f
+#define RAD_CORE     3000.0f
+#define RAD_FARFIELD (RAD_GALAXY * 2.0f)
 
 typedef struct {
     f32 x, y, z;
@@ -56,7 +58,8 @@ typedef struct {
 
 typedef struct {
     f32 angular_offset;
-    f32 eccentricity;
+    f32 ex_inner;
+    f32 ex_outer;
 } galaxy_params_t;
 
 typedef struct {
@@ -70,6 +73,7 @@ platform_t platform_create(void);
 renderer_t renderer_create(void);
 void renderer_draw(renderer_t *renderer);
 void renderer_upload(renderer_t *renderer, vertex_t *vertices);
+f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
 vertex_t *galaxy_generate(galaxy_params_t *params);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
@@ -94,7 +98,7 @@ int main(void) {
     if (!platform.window) return 1;
 
     renderer_t renderer = renderer_create();
-    galaxy_params_t galaxy_params = {-0.14f, 1.3f};
+    galaxy_params_t galaxy_params = {-0.14f, 0.8f, 1.0f};
     app_t app = {
         .is_running = true,
         .platform = &platform,
@@ -317,6 +321,21 @@ static void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
     glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_CIRCLES * NUM_PTS, vertices);
 }
 
+static f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
+    if (radius < RAD_CORE) {
+        f32 t = radius / RAD_CORE;
+        return 1.0f + t * (params->ex_inner - 1.0f);
+    } else if (radius < RAD_GALAXY) {
+        f32 t = (radius - RAD_CORE) / (RAD_GALAXY - RAD_CORE);
+        return params->ex_inner + t * (params->ex_outer - params->ex_inner);
+    } else if (radius < RAD_FARFIELD) {
+        f32 t = (radius - RAD_GALAXY) / (RAD_FARFIELD - RAD_GALAXY);
+        return params->ex_outer + t * (1.0f - params->ex_outer);
+    } else {
+        return 1.0f;
+    }
+}
+
 static vertex_t *galaxy_generate(galaxy_params_t *params) {
     static vertex_t vertices[NUM_CIRCLES * NUM_PTS];
     f32 scale = 0.5f / RAD_GALAXY;
@@ -331,7 +350,7 @@ static vertex_t *galaxy_generate(galaxy_params_t *params) {
             f32 theta = ((f32)point / NUM_PTS) * 2.0f * PI;
             i32 idx = circle * NUM_PTS + point;
             f32 x = cosf(theta) * radius;
-            f32 y = sinf(theta) * radius * params->eccentricity;
+            f32 y = sinf(theta) * radius * galaxy_eccentricity(params, radius);
             vertices[idx].x = (x * cos_r - y * sin_r) * scale;
             vertices[idx].y = (x * sin_r + y * cos_r) * scale;
         }
@@ -347,15 +366,18 @@ static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
     switch (umsg) {
         case WM_KEYDOWN: {
             switch (wparam) {
-                case VK_LEFT:  app->galaxy_params->angular_offset -= 0.005f; break;
-                case VK_RIGHT: app->galaxy_params->angular_offset += 0.005f; break;
-                case VK_DOWN:  app->galaxy_params->eccentricity   -= 0.02f;  break;
-                case VK_UP:    app->galaxy_params->eccentricity   += 0.02f;  break;
+                case 'Q': app->galaxy_params->angular_offset += 0.005f; break;
+                case 'A': app->galaxy_params->angular_offset -= 0.005f; break;
+                case 'W': app->galaxy_params->ex_inner       += 0.02f;  break;
+                case 'S': app->galaxy_params->ex_inner       -= 0.02f;  break;
+                case 'E': app->galaxy_params->ex_outer       += 0.02f;  break;
+                case 'D': app->galaxy_params->ex_outer       -= 0.02f;  break;
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
             renderer_upload(app->renderer, galaxy_generate(app->galaxy_params));
-            printf("offset: %f  ecc: %f\n", app->galaxy_params->angular_offset,
-                                                    app->galaxy_params->eccentricity);
+            printf("offset: %f  ex_inner: %f ex_outer: %f\n", app->galaxy_params->angular_offset,
+                                                                      app->galaxy_params->ex_inner, 
+                                                                      app->galaxy_params->ex_outer);
         } break;
         case WM_SIZE: {
             u32 width = LOWORD(lparam);
