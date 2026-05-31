@@ -54,14 +54,22 @@ typedef struct {
 } renderer_t;
 
 typedef struct {
+    f32 angular_offset;
+    f32 eccentricity;
+} galaxy_params_t;
+
+typedef struct {
     b32        is_running;
     platform_t *platform;
     renderer_t *renderer;
+    galaxy_params_t *galaxy_params;
 } app_t;
 
 platform_t platform_create(void);
 renderer_t renderer_create(void);
 void renderer_draw(renderer_t *renderer);
+void renderer_upload(renderer_t *renderer, vertex_t *vertices);
+vertex_t *galaxy_generate(galaxy_params_t *params);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 const char* vert_shader_source =
@@ -85,15 +93,18 @@ int main(void) {
     if (!platform.window) return 1;
 
     renderer_t renderer = renderer_create();
-
+    galaxy_params_t galaxy_params = {0.05f, 0.5f};
     app_t app = {
         .is_running = true,
         .platform = &platform,
         .renderer = &renderer,
+        .galaxy_params = &galaxy_params,
     };
 
     SetWindowLongPtrW(platform.window, GWLP_USERDATA, (LONG_PTR)&app);
 
+    vertex_t *vertices = galaxy_generate(&galaxy_params);
+    renderer_upload(&renderer, vertices);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
     while (app.is_running) {
         MSG msg = {0};
@@ -279,24 +290,7 @@ static renderer_t renderer_create(void) {
         glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
 
-        vertex_t vertices[NUM_CIRCLES * NUM_PTS] = {0};
-        for (i32 circle = 0; circle < NUM_CIRCLES; circle++) {
-            f32 radius = ((f32)(circle + 1) / NUM_CIRCLES) * 0.5f;
-            f32 rotation = circle;
-            f32 cos_r = cosf(rotation);
-            f32 sin_r = sinf(rotation);
-
-            for (i32 point = 0; point < NUM_PTS; point++) {
-                f32 theta = ((f32)point / NUM_PTS) * 2.0f * PI;
-                i32 idx = circle * NUM_PTS + point;
-                f32 x = cosf(theta) * radius;
-                f32 y = sinf(theta) * radius;
-                vertices[idx].x = x * cos_r - y * sin_r;
-                vertices[idx].y = x * sin_r + y * cos_r;
-            }
-        }
-
-        glNamedBufferStorage(vbo, sizeof(vertices), vertices, 0);
+        glNamedBufferStorage(vbo, sizeof(vertex_t) * NUM_CIRCLES * NUM_PTS, NULL, GL_DYNAMIC_STORAGE_BIT);
 
         glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex_t));
         glVertexArrayAttribBinding(vao, 0, 0);
@@ -316,6 +310,32 @@ static void renderer_draw(renderer_t *renderer) {
     glBindVertexArray(renderer->vao);
     glUseProgram(renderer->shader_program);
     glDrawArrays(GL_POINTS, 0, NUM_CIRCLES * NUM_PTS);
+}
+
+static void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
+    glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_CIRCLES * NUM_PTS, vertices);
+}
+
+static vertex_t *galaxy_generate(galaxy_params_t *params) {
+    static vertex_t vertices[NUM_CIRCLES * NUM_PTS];
+
+    for (i32 circle = 0; circle < NUM_CIRCLES; circle++) {
+        f32 radius = ((f32)(circle + 1) / NUM_CIRCLES) * 0.5f;
+        f32 rotation = circle * params->angular_offset;
+        f32 cos_r = cosf(rotation);
+        f32 sin_r = sinf(rotation);
+
+        for (i32 point = 0; point < NUM_PTS; point++) {
+            f32 theta = ((f32)point / NUM_PTS) * 2.0f * PI;
+            i32 idx = circle * NUM_PTS + point;
+            f32 x = cosf(theta) * radius;
+            f32 y = sinf(theta) * radius * params->eccentricity;
+            vertices[idx].x = x * cos_r - y * sin_r;
+            vertices[idx].y = x * sin_r + y * cos_r;
+        }
+    }
+
+    return vertices;
 }
 
 static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
