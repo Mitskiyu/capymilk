@@ -33,8 +33,9 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define NUM_PTS 2000
-#define NUM_CIRCLES 25
+#define NUM_PTS      2000
+#define NUM_CIRCLES  25
+#define RAD_GALAXY   13000.0f
 
 typedef struct {
     f32 x, y, z;
@@ -318,9 +319,10 @@ static void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
 
 static vertex_t *galaxy_generate(galaxy_params_t *params) {
     static vertex_t vertices[NUM_CIRCLES * NUM_PTS];
+    f32 scale = 0.5f / RAD_GALAXY;
 
     for (i32 circle = 0; circle < NUM_CIRCLES; circle++) {
-        f32 radius = ((f32)(circle + 1) / NUM_CIRCLES) * 0.5f;
+        f32 radius = ((f32)(circle + 1) / NUM_CIRCLES) * RAD_GALAXY;
         f32 rotation = circle * params->angular_offset;
         f32 cos_r = cosf(rotation);
         f32 sin_r = sinf(rotation);
@@ -330,8 +332,8 @@ static vertex_t *galaxy_generate(galaxy_params_t *params) {
             i32 idx = circle * NUM_PTS + point;
             f32 x = cosf(theta) * radius;
             f32 y = sinf(theta) * radius * params->eccentricity;
-            vertices[idx].x = x * cos_r - y * sin_r;
-            vertices[idx].y = x * sin_r + y * cos_r;
+            vertices[idx].x = (x * cos_r - y * sin_r) * scale;
+            vertices[idx].y = (x * sin_r + y * cos_r) * scale;
         }
     }
 
