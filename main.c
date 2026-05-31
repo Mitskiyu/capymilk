@@ -93,7 +93,7 @@ int main(void) {
     if (!platform.window) return 1;
 
     renderer_t renderer = renderer_create();
-    galaxy_params_t galaxy_params = {0.05f, 0.5f};
+    galaxy_params_t galaxy_params = {-0.14f, 1.3f};
     app_t app = {
         .is_running = true,
         .platform = &platform,
@@ -343,6 +343,18 @@ static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
     if (!app) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
     switch (umsg) {
+        case WM_KEYDOWN: {
+            switch (wparam) {
+                case VK_LEFT:  app->galaxy_params->angular_offset -= 0.005f; break;
+                case VK_RIGHT: app->galaxy_params->angular_offset += 0.005f; break;
+                case VK_DOWN:  app->galaxy_params->eccentricity   -= 0.02f;  break;
+                case VK_UP:    app->galaxy_params->eccentricity   += 0.02f;  break;
+                default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
+            }
+            renderer_upload(app->renderer, galaxy_generate(app->galaxy_params));
+            printf("offset: %f  ecc: %f\n", app->galaxy_params->angular_offset,
+                                                    app->galaxy_params->eccentricity);
+        } break;
         case WM_SIZE: {
             u32 width = LOWORD(lparam);
             u32 height = HIWORD(lparam);
