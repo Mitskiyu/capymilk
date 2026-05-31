@@ -33,11 +33,12 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define NUM_PTS 10000
+#define NUM_PTS 2000
+#define NUM_CIRCLES 25
 
 typedef struct {
     f32 x, y, z;
-} vertex;
+} vertex_t;
 
 typedef struct {
     HINSTANCE mod_handle;
@@ -76,7 +77,7 @@ const char* frag_shader_source =
     "out vec4 frag_color;\n"
     "void main()\n"
     "{\n"
-    "frag_color = vec4(1.0f, 0.5f, 0.5f, 1.0f);\n"
+    "frag_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
     "}\n\0";
 
 int main(void) {
@@ -93,7 +94,7 @@ int main(void) {
 
     SetWindowLongPtrW(platform.window, GWLP_USERDATA, (LONG_PTR)&app);
 
-    glClearColor(0.5, 0.0, 0.5, 1.0);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0);
     while (app.is_running) {
         MSG msg = {0};
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -278,18 +279,26 @@ static renderer_t renderer_create(void) {
         glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
 
-        vertex vertices[NUM_PTS] = {0};
-        for (size_t i = 0; i < NUM_PTS; i++) {
-            float step = i * (360.0f / NUM_PTS);
-            float radian = step * (PI / 180.0f);
-            vertices[i].x = cosf(radian) * 0.5f;
-            vertices[i].y = sinf(radian) * 0.5f;
-            vertices[i].z = 0.0f;
+        vertex_t vertices[NUM_CIRCLES * NUM_PTS] = {0};
+        for (i32 circle = 0; circle < NUM_CIRCLES; circle++) {
+            f32 radius = ((f32)(circle + 1) / NUM_CIRCLES) * 0.5f;
+            f32 rotation = circle;
+            f32 cos_r = cosf(rotation);
+            f32 sin_r = sinf(rotation);
+
+            for (i32 point = 0; point < NUM_PTS; point++) {
+                f32 theta = ((f32)point / NUM_PTS) * 2.0f * PI;
+                i32 idx = circle * NUM_PTS + point;
+                f32 x = cosf(theta) * radius;
+                f32 y = sinf(theta) * radius;
+                vertices[idx].x = x * cos_r - y * sin_r;
+                vertices[idx].y = x * sin_r + y * cos_r;
+            }
         }
 
         glNamedBufferStorage(vbo, sizeof(vertices), vertices, 0);
 
-        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex));
+        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex_t));
         glVertexArrayAttribBinding(vao, 0, 0);
         glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
         glEnableVertexArrayAttrib(vao, 0);
@@ -306,7 +315,7 @@ static void renderer_draw(renderer_t *renderer) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(renderer->vao);
     glUseProgram(renderer->shader_program);
-    glDrawArrays(GL_POINTS, 0, NUM_PTS);
+    glDrawArrays(GL_POINTS, 0, NUM_CIRCLES * NUM_PTS);
 }
 
 static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
