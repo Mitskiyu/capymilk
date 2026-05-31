@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #define UNICODE
 #include <windows.h>
@@ -33,7 +34,7 @@ static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define NUM_PTS      2000
+#define NUM_PTS      200
 #define NUM_CIRCLES  25
 #define RAD_GALAXY   13000.0f
 #define RAD_CORE     3000.0f
@@ -347,7 +348,7 @@ static vertex_t *galaxy_generate(galaxy_params_t *params) {
         f32 sin_r = sinf(rotation);
 
         for (i32 point = 0; point < NUM_PTS; point++) {
-            f32 theta = ((f32)point / NUM_PTS) * 2.0f * PI;
+            f32 theta = (rand() / (f32)RAND_MAX) * 2.0f * PI;
             i32 idx = circle * NUM_PTS + point;
             f32 x = cosf(theta) * radius;
             f32 y = sinf(theta) * radius * galaxy_eccentricity(params, radius);
