@@ -213,7 +213,7 @@ static platform_t platform_create(void) {
 
     HWND window = CreateWindowExW(
         0, CLASS_NAME, L"Capymilk", WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
-        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, mod_handle,
+        CW_USEDEFAULT, 1024, 1024, NULL, NULL, mod_handle,
         NULL
     );
     if (!window) return platform;  // log
