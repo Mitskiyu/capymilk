@@ -21,15 +21,15 @@
 #define WGL_STENCIL_BITS_ARB   0x2023
 
 typedef HGLRC(wglCreateContextAttribsARB_func)(
-    HDC hdc, HGLRC hshareContext, const int* attribList
+    HDC hdc, HGLRC hshareContext, const int *attribList
 );
 typedef BOOL(wglChoosePixelFormatARB_func)(
-    HDC hdc, const int* piAttribIList, const FLOAT* pfAttribFList,
-    UINT nMaxFormats, int* piFormats, UINT* nNumFormats
+    HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList,
+    UINT nMaxFormats, int *piFormats, UINT *nNumFormats
 );
 
-static wglCreateContextAttribsARB_func* wglCreateContextAttribsARB = NULL;
-static wglChoosePixelFormatARB_func* wglChoosePixelFormatARB = NULL;
+global wglCreateContextAttribsARB_func *wglCreateContextAttribsARB = NULL;
+global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
@@ -78,7 +78,7 @@ f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
 vertex_t *galaxy_generate(galaxy_params_t *params);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
-const char* vert_shader_source =
+global const char* vert_shader_source =
     "#version 450\n"
     "layout (location = 0) in vec3 a_pos;\n"
     "void main()\n"
@@ -86,7 +86,7 @@ const char* vert_shader_source =
     "gl_Position = vec4(a_pos, 1.0);\n"
     "}\n\0";
 
-const char* frag_shader_source =
+global const char* frag_shader_source =
     "#version 450\n"
     "out vec4 frag_color;\n"
     "void main()\n"
@@ -128,7 +128,7 @@ int main(void) {
     return 0;
 }
 
-static platform_t platform_create(void) {
+internal platform_t platform_create(void) {
     platform_t platform = {0};
 
     HINSTANCE mod_handle = GetModuleHandle(NULL);
@@ -171,7 +171,6 @@ static platform_t platform_create(void) {
         wglChoosePixelFormatARB = (wglChoosePixelFormatARB_func*)
             wglGetProcAddress("wglChoosePixelFormatARB");
 
-        // clang-format off
         i32 pf_attribs[] = {
             WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
             WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
@@ -182,7 +181,6 @@ static platform_t platform_create(void) {
             WGL_STENCIL_BITS_ARB,   8,
             0
         };
-        // clang-format on
 
         u32 num_formats = 0;
         wglChoosePixelFormatARB(
@@ -190,7 +188,6 @@ static platform_t platform_create(void) {
         );
 
         HINSTANCE gl_dll = LoadLibraryA("opengl32.dll");
-        // clang-format off
         // Load OpenGL funcs
         #define X(ret, name, args)                                       \
             gl##name = (gl_##name##_func*)wglGetProcAddress("gl" #name); \
@@ -198,7 +195,6 @@ static platform_t platform_create(void) {
                 gl##name = (gl_##name##_func*)GetProcAddress(gl_dll, "gl" #name);
         #include "opengl_xlist.h"
         #undef X
-        // clang-format on
 
         FreeLibrary(gl_dll);
         wglMakeCurrent(dummy_dc, NULL);
@@ -230,13 +226,11 @@ static platform_t platform_create(void) {
     DescribePixelFormat(dc, pixel_format, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
     SetPixelFormat(dc, pixel_format, &pfd);
 
-    // clang-format off
     i32 ctx_attribs[] = {
         WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
         WGL_CONTEXT_MINOR_VERSION_ARB, 5,
         0
     };
-    // clang-format on
 
     HGLRC gl_ctx = wglCreateContextAttribsARB(dc, NULL, ctx_attribs);
     if (!gl_ctx) return platform;  // log
@@ -251,7 +245,7 @@ static platform_t platform_create(void) {
     return platform;
 }
 
-static renderer_t renderer_create(void) {
+internal renderer_t renderer_create(void) {
     renderer_t renderer = {0};
 
     GLuint shader_program = 0;
@@ -311,18 +305,18 @@ static renderer_t renderer_create(void) {
     return renderer;
 }
 
-static void renderer_draw(renderer_t *renderer) {
+internal void renderer_draw(renderer_t *renderer) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(renderer->vao);
     glUseProgram(renderer->shader_program);
     glDrawArrays(GL_POINTS, 0, NUM_CIRCLES * NUM_PTS);
 }
 
-static void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
+internal void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
     glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_CIRCLES * NUM_PTS, vertices);
 }
 
-static f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
+internal f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
     if (radius < RAD_CORE) {
         f32 t = radius / RAD_CORE;
         return 1.0f + t * (params->ex_inner - 1.0f);
@@ -337,8 +331,8 @@ static f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
     }
 }
 
-static vertex_t *galaxy_generate(galaxy_params_t *params) {
-    static vertex_t vertices[NUM_CIRCLES * NUM_PTS];
+internal vertex_t *galaxy_generate(galaxy_params_t *params) {
+    local_persist vertex_t vertices[NUM_CIRCLES * NUM_PTS];
     f32 scale = 0.5f / RAD_GALAXY;
 
     for (i32 circle = 0; circle < NUM_CIRCLES; circle++) {
@@ -360,8 +354,8 @@ static vertex_t *galaxy_generate(galaxy_params_t *params) {
     return vertices;
 }
 
-static LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
-    app_t* app = (app_t*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
+    app_t *app = (app_t*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!app) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
     switch (umsg) {

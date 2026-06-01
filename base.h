@@ -16,4 +16,8 @@ typedef i32 b32;
 
 typedef float f32;
 
+#define internal static
+#define global   static
+#define local_persist static
+
 #define PI 3.14159265358979f
