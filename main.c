@@ -39,7 +39,6 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define RAD_CORE     6000.0f
 #define RAD_FARFIELD (RAD_GALAXY * 2.0f)
 
-#define I0_DISK   1.0f
 #define I0_BULGE  1.0f
 #define K         0.02f
 #define A         (RAD_GALAXY / 3.0f)
@@ -343,9 +342,12 @@ internal f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
 }
 
 internal f32 galaxy_brightness(f32 radius) {
-    f32 bulge = I0_BULGE * expf(-K * powf(radius, 0.25f));
-    f32 disk  = I0_DISK * expf(-radius / A);
-    return bulge + disk;
+    if (radius < RAD_CORE) {
+        return I0_BULGE * expf(-K * powf(radius, 0.25f));
+    } else {
+        f32 i0_disk = I0_BULGE * expf(-K * powf(RAD_CORE, 0.25f));
+        return i0_disk * expf(-(radius - RAD_CORE) / A);
+    }
 }
 
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative) {
