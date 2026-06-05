@@ -40,6 +40,11 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define RAD_CORE     3000.0f
 #define RAD_FARFIELD (RAD_GALAXY * 2.0f)
 
+#define I0_DISK   1.0f
+#define I0_BULGE  1.0f
+#define K         0.02f
+#define A         (RAD_GALAXY / 3.0f)
+
 typedef struct {
     f32 x, y, z;
 } vertex_t;
@@ -75,6 +80,7 @@ renderer_t renderer_create(void);
 void renderer_draw(renderer_t *renderer);
 void renderer_upload(renderer_t *renderer, vertex_t *vertices);
 f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
+f32 galaxy_brightness(f32 radius);
 vertex_t *galaxy_generate(galaxy_params_t *params);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
@@ -329,6 +335,12 @@ internal f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
     } else {
         return 1.0f;
     }
+}
+
+internal f32 galaxy_brightness(f32 radius) {
+    f32 bulge = I0_BULGE * expf(-K * powf(radius, 0.25f));
+    f32 disk  = I0_DISK * expf(-radius / A);
+    return bulge + disk;
 }
 
 internal vertex_t *galaxy_generate(galaxy_params_t *params) {
