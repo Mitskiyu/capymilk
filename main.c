@@ -44,6 +44,7 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define I0_BULGE  1.0f
 #define K         0.02f
 #define A         (RAD_GALAXY / 3.0f)
+#define CDF_STEPS 1000
 
 typedef struct {
     f32 x, y, z;
@@ -81,6 +82,8 @@ void renderer_draw(renderer_t *renderer);
 void renderer_upload(renderer_t *renderer, vertex_t *vertices);
 f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
 f32 galaxy_brightness(f32 radius);
+void galaxy_cdf_build(f32 *radii, f32 *cumulative);
+f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
 vertex_t *galaxy_generate(galaxy_params_t *params);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
@@ -341,6 +344,35 @@ internal f32 galaxy_brightness(f32 radius) {
     f32 bulge = I0_BULGE * expf(-K * powf(radius, 0.25f));
     f32 disk  = I0_DISK * expf(-radius / A);
     return bulge + disk;
+}
+
+internal void galaxy_cdf_build(f32 *radii, f32 *cumulative) {
+    f32 step = (RAD_FARFIELD) / CDF_STEPS;
+
+    f32 total = 0;
+    for (i32 i = 0; i < CDF_STEPS/2; i++) {
+        f32 r = (i*2 + 2) * step;
+        total += step / 3 * (galaxy_brightness(i*2 * step) +
+                         4 * galaxy_brightness((i*2 + 1) * step) +
+                             galaxy_brightness(r));
+
+        radii[i] = r;
+        cumulative[i] = total;
+    }
+
+    for (i32 i = 0; i < CDF_STEPS/2; i++) {
+        f32 max = cumulative[CDF_STEPS/2 - 1];
+        cumulative[i] /= max;
+    }
+}
+
+internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t) {
+    i32 i = 0;
+    while (t > cumulative[i] && i < CDF_STEPS/2 - 1) {
+        i++;
+    }
+
+    return radii[i];
 }
 
 internal vertex_t *galaxy_generate(galaxy_params_t *params) {
