@@ -46,6 +46,7 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 
 typedef struct {
     f32 x, y, z;
+    f32 r, g, b;
 } vertex_t;
 
 typedef struct {
@@ -86,20 +87,24 @@ f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
 void galaxy_generate(galaxy_params_t *params, vertex_t *vertices);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
-global const char* vert_shader_source =
+global const char *vert_shader_source =
     "#version 450\n"
     "layout (location = 0) in vec3 a_pos;\n"
+    "layout (location = 1) in vec3 a_color;\n"
+    "out vec3 v_color;\n"
     "void main()\n"
     "{\n"
     "gl_Position = vec4(a_pos, 1.0);\n"
+    "v_color = a_color;\n"
     "}\n\0";
 
-global const char* frag_shader_source =
+global const char *frag_shader_source =
     "#version 450\n"
+    "in vec3 v_color;\n"
     "out vec4 frag_color;\n"
     "void main()\n"
     "{\n"
-    "frag_color = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
+    "frag_color = vec4(v_color, 1.0f);\n"
     "}\n\0";
 
 int main(void) {
@@ -306,6 +311,10 @@ internal renderer_t renderer_create(void) {
         glVertexArrayAttribBinding(vao, 0, 0);
         glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
         glEnableVertexArrayAttrib(vao, 0);
+
+        glVertexArrayAttribBinding(vao, 1, 0);
+        glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32));
+        glEnableVertexArrayAttrib(vao, 1);
     }
 
     renderer.shader_program = shader_program;
@@ -397,6 +406,9 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
 
         vertices[i].x = (x * cos_r - y * sin_r) * scale;
         vertices[i].y = (x * sin_r + y * cos_r) * scale;
+        vertices[i].r = 1.0f;
+        vertices[i].g = 0.0f;
+        vertices[i].b = 0.0f;
     }
 }
 
