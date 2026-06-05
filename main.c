@@ -34,10 +34,9 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define NUM_PTS      200
-#define NUM_CIRCLES  25
-#define RAD_GALAXY   13000.0f
-#define RAD_CORE     3000.0f
+#define NUM_STARS    60000
+#define RAD_GALAXY   15000.0f
+#define RAD_CORE     6000.0f
 #define RAD_FARFIELD (RAD_GALAXY * 2.0f)
 
 #define I0_DISK   1.0f
@@ -71,6 +70,7 @@ typedef struct {
 
 typedef struct {
     b32        is_running;
+    vertex_t   *vertices;
     platform_t *platform;
     renderer_t *renderer;
     galaxy_params_t *galaxy_params;
@@ -84,7 +84,7 @@ f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
 f32 galaxy_brightness(f32 radius);
 void galaxy_cdf_build(f32 *radii, f32 *cumulative);
 f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
-vertex_t *galaxy_generate(galaxy_params_t *params);
+void galaxy_generate(galaxy_params_t *params, vertex_t *vertices);
 LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 global const char* vert_shader_source =
@@ -107,10 +107,12 @@ int main(void) {
     platform_t platform = platform_create();
     if (!platform.window) return 1;
 
+    vertex_t *vertices = (vertex_t *)malloc(NUM_STARS * sizeof(vertex_t));
     renderer_t renderer = renderer_create();
-    galaxy_params_t galaxy_params = {-0.14f, 0.8f, 1.0f};
+    galaxy_params_t galaxy_params = {-0.0004f, 0.8f, 1.0f};
     app_t app = {
         .is_running = true,
+        .vertices = vertices,
         .platform = &platform,
         .renderer = &renderer,
         .galaxy_params = &galaxy_params,
@@ -118,7 +120,7 @@ int main(void) {
 
     SetWindowLongPtrW(platform.window, GWLP_USERDATA, (LONG_PTR)&app);
 
-    vertex_t *vertices = galaxy_generate(&galaxy_params);
+    galaxy_generate(&galaxy_params, vertices);
     renderer_upload(&renderer, vertices);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
     while (app.is_running) {
@@ -299,7 +301,7 @@ internal renderer_t renderer_create(void) {
         glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
 
-        glNamedBufferStorage(vbo, sizeof(vertex_t) * NUM_CIRCLES * NUM_PTS, NULL, GL_DYNAMIC_STORAGE_BIT);
+        glNamedBufferStorage(vbo, sizeof(vertex_t) * NUM_STARS, NULL, GL_DYNAMIC_STORAGE_BIT);
 
         glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex_t));
         glVertexArrayAttribBinding(vao, 0, 0);
@@ -318,11 +320,11 @@ internal void renderer_draw(renderer_t *renderer) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(renderer->vao);
     glUseProgram(renderer->shader_program);
-    glDrawArrays(GL_POINTS, 0, NUM_CIRCLES * NUM_PTS);
+    glDrawArrays(GL_POINTS, 0, NUM_STARS);
 }
 
 internal void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
-    glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_CIRCLES * NUM_PTS, vertices);
+    glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_STARS, vertices);
 }
 
 internal f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius) {
@@ -375,27 +377,25 @@ internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t) {
     return radii[i];
 }
 
-internal vertex_t *galaxy_generate(galaxy_params_t *params) {
-    local_persist vertex_t vertices[NUM_CIRCLES * NUM_PTS];
+internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
+    f32 radii[CDF_STEPS / 2];
+    f32 cumulative[CDF_STEPS / 2];
+    galaxy_cdf_build(radii, cumulative);
+
     f32 scale = 0.5f / RAD_GALAXY;
+    f32 rand_scale = 1.0f / RAND_MAX;
+    for (i32 i = 0; i < NUM_STARS; i++) {
+        f32 radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
+        f32 tilt = radius * params->angular_offset;
+        f32 theta = (rand() * rand_scale) * 2.0f * PI;
+        f32 x = cosf(theta) * radius;
+        f32 y = sinf(theta) * radius * galaxy_eccentricity(params, radius);
+        f32 cos_r = cosf(tilt);
+        f32 sin_r = sinf(tilt);
 
-    for (i32 circle = 0; circle < NUM_CIRCLES; circle++) {
-        f32 radius = ((f32)(circle + 1) / NUM_CIRCLES) * RAD_GALAXY;
-        f32 rotation = circle * params->angular_offset;
-        f32 cos_r = cosf(rotation);
-        f32 sin_r = sinf(rotation);
-
-        for (i32 point = 0; point < NUM_PTS; point++) {
-            f32 theta = (rand() / (f32)RAND_MAX) * 2.0f * PI;
-            i32 idx = circle * NUM_PTS + point;
-            f32 x = cosf(theta) * radius;
-            f32 y = sinf(theta) * radius * galaxy_eccentricity(params, radius);
-            vertices[idx].x = (x * cos_r - y * sin_r) * scale;
-            vertices[idx].y = (x * sin_r + y * cos_r) * scale;
-        }
+        vertices[i].x = (x * cos_r - y * sin_r) * scale;
+        vertices[i].y = (x * sin_r + y * cos_r) * scale;
     }
-
-    return vertices;
 }
 
 internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
@@ -405,15 +405,16 @@ internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam)
     switch (umsg) {
         case WM_KEYDOWN: {
             switch (wparam) {
-                case 'Q': app->galaxy_params->angular_offset += 0.005f; break;
-                case 'A': app->galaxy_params->angular_offset -= 0.005f; break;
+                case 'Q': app->galaxy_params->angular_offset += 0.00005f; break;
+                case 'A': app->galaxy_params->angular_offset -= 0.00005f; break;
                 case 'W': app->galaxy_params->ex_inner       += 0.02f;  break;
                 case 'S': app->galaxy_params->ex_inner       -= 0.02f;  break;
                 case 'E': app->galaxy_params->ex_outer       += 0.02f;  break;
                 case 'D': app->galaxy_params->ex_outer       -= 0.02f;  break;
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
-            renderer_upload(app->renderer, galaxy_generate(app->galaxy_params));
+            galaxy_generate(app->galaxy_params, app->vertices);
+            renderer_upload(app->renderer, app->vertices);
             printf("offset: %f  ex_inner: %f ex_outer: %f\n", app->galaxy_params->angular_offset,
                                                                       app->galaxy_params->ex_inner, 
                                                                       app->galaxy_params->ex_outer);
