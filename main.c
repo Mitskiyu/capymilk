@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <gl/gl.h>
 
-#include "base.h"
+#include "base_core.h"
 #include "opengl.h"
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
