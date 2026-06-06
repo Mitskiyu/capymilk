@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #define UNICODE
 #include <windows.h>
@@ -115,6 +116,8 @@ global const char *frag_shader_source =
     "}\n\0";
 
 int main(void) {
+    srand((u32)time(NULL));
+
     platform_t platform = platform_create();
     if (!platform.window) return 1;
 
