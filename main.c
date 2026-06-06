@@ -119,6 +119,8 @@ int main(void) {
     if (!platform.window) return 1;
 
     vertex_t *vertices = (vertex_t *)malloc(NUM_STARS * sizeof(vertex_t));
+    if (!vertices) return 1;
+
     renderer_t renderer = renderer_create();
     galaxy_params_t galaxy_params = {-0.0004f, 0.8f, 1.0f};
     app_t app = {
