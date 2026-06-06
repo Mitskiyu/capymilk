@@ -6,7 +6,12 @@
 #include <gl/gl.h>
 
 #include "base_core.h"
+#include "base_math.h"
 #include "opengl.h"
+#include "blackbody.h"
+
+#include "base_math.c"
+#include "blackbody.c"
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
@@ -404,11 +409,14 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         f32 cos_r = cosf(tilt);
         f32 sin_r = sinf(tilt);
 
+        f32 temp = 6000 + (4000 * rand() * rand_scale - 2000);
+        vec3_t color = blackbody_color(temp);
+
         vertices[i].x = (x * cos_r - y * sin_r) * scale;
         vertices[i].y = (x * sin_r + y * cos_r) * scale;
-        vertices[i].r = 1.0f;
-        vertices[i].g = 0.0f;
-        vertices[i].b = 0.0f;
+        vertices[i].r = color.x;
+        vertices[i].g = color.y;
+        vertices[i].b = color.z;
     }
 }
 

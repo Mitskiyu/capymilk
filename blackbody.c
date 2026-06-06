@@ -53,3 +53,36 @@ internal vec3_t spectrum_to_xyz(f32 temp) {
 
     return xyz;
 }
+
+internal vec3_t xyz_to_rgb(vec3_t xyz) {
+    local_persist const mat3_t srgb = {{
+     3.2406f, -1.5372f, -0.4986f,
+    -0.9689f,  1.8758f,  0.0415f,
+     0.0557f, -0.2040f,  1.0570f
+    }};
+
+    return mat3_mul_vec3(srgb, xyz);
+}
+
+internal vec3_t blackbody_color(f32 temp) {
+    vec3_t xyz = spectrum_to_xyz(temp);
+    vec3_t rgb = xyz_to_rgb(xyz);
+    
+    // constrain
+    f32 w = MIN(0, MIN(rgb.x, MIN(rgb.y, rgb.z)));
+    if (w < 0) {
+        rgb.x -= w;
+        rgb.y -= w;
+        rgb.z -= w;
+    }
+
+    // normalize
+    f32 m = MAX(rgb.x, MAX(rgb.y, rgb.z));
+    if (m > 0) {
+        rgb.x /= m;
+        rgb.y /= m;
+        rgb.z /= m;
+    }
+
+    return rgb;
+}
