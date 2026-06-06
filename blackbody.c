@@ -7,7 +7,7 @@ internal f32 blackbody_spectrum(i32 wavelength, f32 temp) {
     return C1 / powf(wavelength_m, 5) / (expf(C2 / (wavelength_m * temp)) - 1);
 }
 
-internal void spectrum_to_xyz(f32 *xyz, f32 temp) {
+internal vec3_t spectrum_to_xyz(f32 temp) {
     local_persist const f32 cie_color_match[81][3] = {
         {0.0014,0.0000,0.0065}, {0.0022,0.0001,0.0105}, {0.0042,0.0001,0.0201},
         {0.0076,0.0002,0.0362}, {0.0143,0.0004,0.0679}, {0.0232,0.0006,0.1102},
@@ -38,15 +38,18 @@ internal void spectrum_to_xyz(f32 *xyz, f32 temp) {
         {0.0001,0.0000,0.0000}, {0.0001,0.0000,0.0000}, {0.0000,0.0000,0.0000}
     };
 
+    vec3_t xyz = {0};
     for (i32 i = 0, lambda = 380; i < 81; i++, lambda += 5) {
         f32 intensity = blackbody_spectrum(lambda, temp);
-        xyz[0] += intensity * cie_color_match[i][0];
-        xyz[1] += intensity * cie_color_match[i][1];
-        xyz[2] += intensity * cie_color_match[i][2];
+        xyz.x += intensity * cie_color_match[i][0];
+        xyz.y += intensity * cie_color_match[i][1];
+        xyz.z += intensity * cie_color_match[i][2];
     }
 
-    f32 total = xyz[0] + xyz[1] + xyz[2];
-    xyz[0] /= total;
-    xyz[1] /= total;
-    xyz[2] /= total;
+    f32 total = xyz.x + xyz.y + xyz.z;
+    xyz.x /= total;
+    xyz.y /= total;
+    xyz.z /= total;
+
+    return xyz;
 }
