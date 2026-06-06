@@ -21,3 +21,6 @@ typedef float f32;
 #define local_persist static
 
 #define PI 3.14159265358979f
+
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
