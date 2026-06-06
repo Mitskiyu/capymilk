@@ -14,6 +14,7 @@ typedef intptr_t      GLintptr;
 #define GL_TRIANGLES           0x0004
 #define GL_DYNAMIC_STORAGE_BIT 0x0100
 #define GL_FLOAT               0x1406
+#define GL_PROGRAM_POINT_SIZE  0x8642
 #define GL_FRAGMENT_SHADER     0x8B30
 #define GL_VERTEX_SHADER       0x8B31
 #define GL_COMPILE_STATUS      0x8B81

@@ -103,6 +103,7 @@ global const char *vert_shader_source =
     "void main()\n"
     "{\n"
     "gl_Position = vec4(a_pos, 1.0);\n"
+    "gl_PointSize = 1.5;\n"
     "v_color = a_color;\n"
     "}\n\0";
 
@@ -328,6 +329,10 @@ internal renderer_t renderer_create(void) {
         glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 1);
     }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glEnable(GL_PROGRAM_POINT_SIZE);
 
     renderer.shader_program = shader_program;
     renderer.vao = vao;
