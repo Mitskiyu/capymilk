@@ -76,16 +76,16 @@ typedef struct {
     galaxy_params_t *galaxy_params;
 } app_t;
 
-platform_t platform_create(void);
-renderer_t renderer_create(void);
-void renderer_draw(renderer_t *renderer);
-void renderer_upload(renderer_t *renderer, vertex_t *vertices);
-f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
-f32 galaxy_brightness(f32 radius);
-void galaxy_cdf_build(f32 *radii, f32 *cumulative);
-f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
-void galaxy_generate(galaxy_params_t *params, vertex_t *vertices);
-LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
+internal platform_t platform_create(void);
+internal renderer_t renderer_create(void);
+internal void renderer_draw(renderer_t *renderer);
+internal void renderer_upload(renderer_t *renderer, vertex_t *vertices);
+internal f32 galaxy_eccentricity(galaxy_params_t *params, f32 radius);
+internal f32 galaxy_brightness(f32 radius);
+internal void galaxy_cdf_build(f32 *radii, f32 *cumulative);
+internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
+internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices);
+internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 global const char *vert_shader_source =
     "#version 450\n"
