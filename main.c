@@ -113,7 +113,9 @@ global const char *frag_shader_source =
     "out vec4 frag_color;\n"
     "void main()\n"
     "{\n"
-    "frag_color = vec4(v_color, 1.0f);\n"
+    "vec2 circ = 2.0 * gl_PointCoord - 1.0;\n"
+    "float alpha = 1 - length(circ);\n"
+    "frag_color = vec4(v_color, alpha);\n"
     "}\n\0";
 
 int main(void) {
