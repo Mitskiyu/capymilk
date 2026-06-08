@@ -55,6 +55,7 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 typedef struct {
     f32 x, y, z;
     f32 r, g, b;
+    f32 mag;
 } vertex_t;
 
 typedef struct {
@@ -99,12 +100,13 @@ global const char *vert_shader_source =
     "#version 450\n"
     "layout (location = 0) in vec3 a_pos;\n"
     "layout (location = 1) in vec3 a_color;\n"
+    "layout (location = 2) in float a_mag;\n"
     "out vec3 v_color;\n"
     "void main()\n"
     "{\n"
     "gl_Position = vec4(a_pos, 1.0);\n"
-    "gl_PointSize = 1.5;\n"
-    "v_color = a_color;\n"
+    "gl_PointSize = 4.0 * a_mag;\n"
+    "v_color = a_color * a_mag;\n"
     "}\n\0";
 
 global const char *frag_shader_source =
@@ -330,6 +332,10 @@ internal renderer_t renderer_create(void) {
         glVertexArrayAttribBinding(vao, 1, 0);
         glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 1);
+
+        glVertexArrayAttribBinding(vao, 2, 0);
+        glVertexArrayAttribFormat(vao, 2, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(f32));
+        glEnableVertexArrayAttrib(vao, 2);
     }
 
     glEnable(GL_BLEND);
@@ -433,6 +439,7 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         vertices[i].r = color.x;
         vertices[i].g = color.y;
         vertices[i].b = color.z;
+        vertices[i].mag = 0.1f + 0.4f * (rand() * rand_scale);
     }
 }
 
