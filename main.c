@@ -61,49 +61,49 @@ typedef struct {
     f32 r, g, b;
     f32 mag;
     f32 type;
-} vertex_t;
+} vertex;
 
 typedef struct {
     HINSTANCE mod_handle;
     HWND      window;
     HDC       device_ctx;
     HGLRC     gl_ctx;
-} platform_t;
+} platform;
 
 typedef struct {
     GLuint vao;
     GLuint vbo;
     GLuint shader_program;
-} renderer_t;
+} renderer;
 
 typedef struct {
     f32 angular_offset;
     f32 ex_inner;
     f32 ex_outer;
-} galaxy_params_t;
+} galaxy_params;
 
 typedef struct {
-    b32        is_running;
-    vertex_t   *vertices;
-    platform_t *platform;
-    renderer_t *renderer;
-    galaxy_params_t *galaxy_params;
-} app_t;
+    b32           is_running;
+    vertex        *vertices;
+    platform      *platform;
+    renderer      *renderer;
+    galaxy_params *galaxy_params;
+} app;
 
-internal platform_t platform_create(void);
+internal platform platform_create(void);
 internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
-internal renderer_t renderer_create(void);
-internal void renderer_draw(renderer_t *renderer);
-internal void renderer_upload(renderer_t *renderer, vertex_t *vertices);
-internal f32 galaxy_ex(galaxy_params_t *params, f32 radius);
+internal renderer renderer_create(void);
+internal void renderer_draw(renderer *render);
+internal void renderer_upload(renderer *render, vertex *vertices);
+internal f32 galaxy_ex(galaxy_params *params, f32 radius);
 internal f32 galaxy_brightness(f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative);
 internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
 internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp);
-internal vec3_t galaxy_spectrum_to_xyz(f32 temp);
-internal vec3_t galaxy_xyz_to_rgb(vec3_t xyz);
-internal vec3_t galaxy_bb_color(f32 temp);
-internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices);
+internal vec3 galaxy_spectrum_to_xyz(f32 temp);
+internal vec3 galaxy_xyz_to_rgb(vec3 xyz);
+internal vec3 galaxy_bb_color(f32 temp);
+internal void galaxy_generate(galaxy_params *params, vertex *vertices);
 
 global const char *vert_shader_source =
     "#version 450\n"
@@ -147,28 +147,28 @@ global const char *frag_shader_source =
 int main(void) {
     srand((u32)time(NULL));
 
-    platform_t platform = platform_create();
-    if (!platform.window) return 1;
+    platform plat = platform_create();
+    if (!plat.window) return 1;
 
-    vertex_t *vertices = (vertex_t *)malloc(NUM_PARTICLES * sizeof(vertex_t));
+    vertex *vertices = (vertex *)malloc(NUM_PARTICLES * sizeof(vertex));
     if (!vertices) return 1;
 
-    renderer_t renderer = renderer_create();
-    galaxy_params_t galaxy_params = {-0.0004f, 0.8f, 1.0f};
-    app_t app = {
+    renderer render = renderer_create();
+    galaxy_params params = {-0.0004f, 0.8f, 1.0f};
+    app state = {
         .is_running = true,
         .vertices = vertices,
-        .platform = &platform,
-        .renderer = &renderer,
-        .galaxy_params = &galaxy_params,
+        .platform = &plat,
+        .renderer = &render,
+        .galaxy_params = &params,
     };
 
-    SetWindowLongPtrW(platform.window, GWLP_USERDATA, (LONG_PTR)&app);
+    SetWindowLongPtrW(plat.window, GWLP_USERDATA, (LONG_PTR)&state);
 
-    galaxy_generate(&galaxy_params, vertices);
-    renderer_upload(&renderer, vertices);
+    galaxy_generate(&params, vertices);
+    renderer_upload(&render, vertices);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
-    while (app.is_running) {
+    while (state.is_running) {
         MSG msg = {0};
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
@@ -176,16 +176,16 @@ int main(void) {
         }
 
         // Draw
-        renderer_draw(&renderer);
+        renderer_draw(&render);
 
-        SwapBuffers(platform.device_ctx);
+        SwapBuffers(plat.device_ctx);
     }
 
     return 0;
 }
 
-internal platform_t platform_create(void) {
-    platform_t platform = {0};
+internal platform platform_create(void) {
+    platform plat = {0};
 
     HINSTANCE mod_handle = GetModuleHandle(NULL);
     i32 pixel_format = 0;
@@ -195,13 +195,13 @@ internal platform_t platform_create(void) {
             .hInstance = mod_handle,
             .lpszClassName = DUMMY_CLASS_NAME
         };
-        if (!RegisterClassW(&dummy_wnd_class)) return platform;  // log
+        if (!RegisterClassW(&dummy_wnd_class)) return plat;  // log
 
         HWND dummy_wnd = CreateWindowW(
             DUMMY_CLASS_NAME, L"", WS_TILEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
             CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, mod_handle, NULL
         );
-        if (!dummy_wnd) return platform;
+        if (!dummy_wnd) return plat;
 
         HDC dummy_dc = GetDC(dummy_wnd);
 
@@ -218,7 +218,7 @@ internal platform_t platform_create(void) {
         SetPixelFormat(dummy_dc, pf, &pfd);
 
         HGLRC dummy_gl_context = wglCreateContext(dummy_dc);
-        if (!dummy_gl_context) return platform;  // log
+        if (!dummy_gl_context) return plat;  // log
 
         wglMakeCurrent(dummy_dc, dummy_gl_context);
 
@@ -267,14 +267,14 @@ internal platform_t platform_create(void) {
         .lpszClassName = CLASS_NAME,
         .hCursor = LoadCursorW(0, IDC_ARROW)
     };
-    if (!RegisterClassW(&wnd_class)) return platform;  // log
+    if (!RegisterClassW(&wnd_class)) return plat;  // log
 
     HWND window = CreateWindowExW(
         0, CLASS_NAME, L"Capymilk", WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
         CW_USEDEFAULT, 1024, 1024, NULL, NULL, mod_handle,
         NULL
     );
-    if (!window) return platform;  // log
+    if (!window) return plat;  // log
 
     HDC dc = GetDC(window);
 
@@ -289,20 +289,20 @@ internal platform_t platform_create(void) {
     };
 
     HGLRC gl_ctx = wglCreateContextAttribsARB(dc, NULL, ctx_attribs);
-    if (!gl_ctx) return platform;  // log
+    if (!gl_ctx) return plat;  // log
     b32 ok = wglMakeCurrent(dc, gl_ctx);
-    if (!ok) return platform;  // log
+    if (!ok) return plat;  // log
     
-    platform.mod_handle = mod_handle;
-    platform.window = window;
-    platform.device_ctx = dc;
-    platform.gl_ctx = gl_ctx;
+    plat.mod_handle = mod_handle;
+    plat.window = window;
+    plat.device_ctx = dc;
+    plat.gl_ctx = gl_ctx;
 
-    return platform;
+    return plat;
 }
 
-internal renderer_t renderer_create(void) {
-    renderer_t renderer = {0};
+internal renderer renderer_create(void) {
+    renderer render = {0};
 
     GLuint shader_program = 0;
     {
@@ -346,8 +346,8 @@ internal renderer_t renderer_create(void) {
         glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
 
-        glNamedBufferStorage(vbo, sizeof(vertex_t) * NUM_PARTICLES, NULL, GL_DYNAMIC_STORAGE_BIT);
-        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex_t));
+        glNamedBufferStorage(vbo, sizeof(vertex) * NUM_PARTICLES, NULL, GL_DYNAMIC_STORAGE_BIT);
+        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex));
 
         // pos
         glVertexArrayAttribBinding(vao, 0, 0);
@@ -374,25 +374,25 @@ internal renderer_t renderer_create(void) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     glEnable(GL_PROGRAM_POINT_SIZE);
 
-    renderer.shader_program = shader_program;
-    renderer.vao = vao;
-    renderer.vbo = vbo;
+    render.shader_program = shader_program;
+    render.vao = vao;
+    render.vbo = vbo;
 
-    return renderer;
+    return render;
 }
 
-internal void renderer_draw(renderer_t *renderer) {
+internal void renderer_draw(renderer *render) {
     glClear(GL_COLOR_BUFFER_BIT);
-    glBindVertexArray(renderer->vao);
-    glUseProgram(renderer->shader_program);
+    glBindVertexArray(render->vao);
+    glUseProgram(render->shader_program);
     glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
 }
 
-internal void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
-    glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_PARTICLES, vertices);
+internal void renderer_upload(renderer *render, vertex *vertices) {
+    glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * NUM_PARTICLES, vertices);
 }
 
-internal f32 galaxy_ex(galaxy_params_t *params, f32 radius) {
+internal f32 galaxy_ex(galaxy_params *params, f32 radius) {
     if (radius < RAD_CORE) {
         f32 t = radius / RAD_CORE;
         return 1.0f + t * (params->ex_inner - 1.0f);
@@ -452,7 +452,7 @@ internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp) {
     return PLANCK_C1 / powf(wavelength_m, 5) / (expf(PLANCK_C2 / (wavelength_m * temp)) - 1);
 }
 
-internal vec3_t galaxy_spectrum_to_xyz(f32 temp) {
+internal vec3 galaxy_spectrum_to_xyz(f32 temp) {
     local_persist const f32 cie_color_match[81][3] = {
         {0.0014f,0.0000f,0.0065f}, {0.0022f,0.0001f,0.0105f}, {0.0042f,0.0001f,0.0201f},
         {0.0076f,0.0002f,0.0362f}, {0.0143f,0.0004f,0.0679f}, {0.0232f,0.0006f,0.1102f},
@@ -483,7 +483,7 @@ internal vec3_t galaxy_spectrum_to_xyz(f32 temp) {
         {0.0001f,0.0000f,0.0000f}, {0.0001f,0.0000f,0.0000f}, {0.0000f,0.0000f,0.0000f}
     };
 
-    vec3_t xyz = {0};
+    vec3 xyz = {0};
     for (i32 i = 0, lambda = 380; i < 81; i++, lambda += 5) {
         f32 intensity = galaxy_bb_spectrum(lambda, temp);
         xyz.x += intensity * cie_color_match[i][0];
@@ -499,8 +499,8 @@ internal vec3_t galaxy_spectrum_to_xyz(f32 temp) {
     return xyz;
 }
 
-internal vec3_t galaxy_xyz_to_rgb(vec3_t xyz) {
-    local_persist const mat3_t srgb = {{
+internal vec3 galaxy_xyz_to_rgb(vec3 xyz) {
+    local_persist const mat3 srgb = {{
      3.2406f, -1.5372f, -0.4986f,
     -0.9689f,  1.8758f,  0.0415f,
      0.0557f, -0.2040f,  1.0570f
@@ -509,9 +509,9 @@ internal vec3_t galaxy_xyz_to_rgb(vec3_t xyz) {
     return mat3_mul_vec3(srgb, xyz);
 }
 
-internal vec3_t galaxy_bb_color(f32 temp) {
-    vec3_t xyz = galaxy_spectrum_to_xyz(temp);
-    vec3_t rgb = galaxy_xyz_to_rgb(xyz);
+internal vec3 galaxy_bb_color(f32 temp) {
+    vec3 xyz = galaxy_spectrum_to_xyz(temp);
+    vec3 rgb = galaxy_xyz_to_rgb(xyz);
     
     // constrain
     f32 w = MIN(0, MIN(rgb.x, MIN(rgb.y, rgb.z)));
@@ -532,7 +532,7 @@ internal vec3_t galaxy_bb_color(f32 temp) {
     return rgb;
 }
 
-internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
+internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
     f32 radii[CDF_POINTS];
     f32 cumulative[CDF_POINTS];
     galaxy_cdf_build(radii, cumulative);
@@ -549,7 +549,7 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         f32 sin_r = sinf(tilt);
 
         f32 temp = 6000 + (4000 * rand() * rand_scale - 2000);
-        vec3_t color = galaxy_bb_color(temp);
+        vec3 color = galaxy_bb_color(temp);
 
         vertices[i].x = (x * cos_r - y * sin_r) * scale;
         vertices[i].y = (x * sin_r + y * cos_r) * scale;
@@ -579,7 +579,7 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         f32 sin_r = sinf(tilt);
 
         f32 temp = 4000 + radius / 4.0f;
-        vec3_t color = galaxy_bb_color(temp);
+        vec3 color = galaxy_bb_color(temp);
 
         vertices[idx].x = (x * cos_r - y * sin_r) * scale;
         vertices[idx].y = (x * sin_r + y * cos_r) * scale;
@@ -592,37 +592,37 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
 }
 
 internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
-    app_t *app = (app_t*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    if (!app) return DefWindowProcW(hwnd, umsg, wparam, lparam);
+    app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
     switch (umsg) {
         case WM_KEYDOWN: {
             switch (wparam) {
-                case 'Q': app->galaxy_params->angular_offset += 0.00005f; break;
-                case 'A': app->galaxy_params->angular_offset -= 0.00005f; break;
-                case 'W': app->galaxy_params->ex_inner       += 0.02f;  break;
-                case 'S': app->galaxy_params->ex_inner       -= 0.02f;  break;
-                case 'E': app->galaxy_params->ex_outer       += 0.02f;  break;
-                case 'D': app->galaxy_params->ex_outer       -= 0.02f;  break;
+                case 'Q': state->galaxy_params->angular_offset += 0.00005f; break;
+                case 'A': state->galaxy_params->angular_offset -= 0.00005f; break;
+                case 'W': state->galaxy_params->ex_inner       += 0.02f;  break;
+                case 'S': state->galaxy_params->ex_inner       -= 0.02f;  break;
+                case 'E': state->galaxy_params->ex_outer       += 0.02f;  break;
+                case 'D': state->galaxy_params->ex_outer       -= 0.02f;  break;
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
-            galaxy_generate(app->galaxy_params, app->vertices);
-            renderer_upload(app->renderer, app->vertices);
-            printf("offset: %f  ex_inner: %f ex_outer: %f\n", app->galaxy_params->angular_offset,
-                                                                      app->galaxy_params->ex_inner, 
-                                                                      app->galaxy_params->ex_outer);
+            galaxy_generate(state->galaxy_params, state->vertices);
+            renderer_upload(state->renderer, state->vertices);
+            printf("offset: %f  ex_inner: %f ex_outer: %f\n", state->galaxy_params->angular_offset,
+                                                                      state->galaxy_params->ex_inner, 
+                                                                      state->galaxy_params->ex_outer);
         } break;
         case WM_SIZE: {
             u32 width = LOWORD(lparam);
             u32 height = HIWORD(lparam);
             glViewport(0, 0, width, height);
 
-            renderer_draw(app->renderer);
+            renderer_draw(state->renderer);
 
-            SwapBuffers(app->platform->device_ctx);
+            SwapBuffers(state->platform->device_ctx);
         } break;
         case WM_CLOSE: {
-            app->is_running = false;
+            state->is_running = false;
         } break;
     }
 

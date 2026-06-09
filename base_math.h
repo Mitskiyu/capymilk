@@ -1,9 +1,9 @@
 typedef struct {
     f32 x, y, z;
-} vec3_t;
+} vec3;
 
 typedef struct {
     f32 v[9]; // row-major
-} mat3_t;
+} mat3;
 
-internal vec3_t mat3_mul_vec3(mat3_t m, vec3_t v);
+internal vec3 mat3_mul_vec3(mat3 m, vec3 v);
