@@ -173,6 +173,7 @@ int main(void) {
 
     SetWindowLongPtrW(plat.window, GWLP_USERDATA, (LONG_PTR)&state);
 
+    galaxy_ct_build();
     galaxy_generate(&params, vertices);
     renderer_upload(&render, vertices);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
@@ -578,6 +579,23 @@ internal vec3 galaxy_bb_color(f32 temp) {
     return rgb;
 }
 
+internal void galaxy_ct_build(void) {
+    f32 step = (TEMP_MAX - TEMP_MIN) / COLOR_TABLE_SIZE;
+    for (i32 i = 0; i < COLOR_TABLE_SIZE; i++) {
+        f32 temp = TEMP_MIN + i * step;
+        vec3 rgb = galaxy_bb_color(temp);
+        color_table[i] = rgb;
+    }
+}
+
+internal vec3 galaxy_ct_lookup(f32 temp) {
+    f32 step = (TEMP_MAX - TEMP_MIN) / COLOR_TABLE_SIZE;
+    i32 i = ((temp - TEMP_MIN) / step);
+    i = MAX(0, MIN(COLOR_TABLE_SIZE - 1, i)); // clamp
+
+    return color_table[i];
+}
+
 internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
     f32 radii[CDF_POINTS];
     f32 cumulative[CDF_POINTS];
@@ -595,7 +613,7 @@ internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
         f32 sin_r = sinf(tilt);
 
         f32 temp = 6000 + (4000 * rand() * rand_scale - 2000);
-        vec3 color = galaxy_bb_color(temp);
+        vec3 color = galaxy_ct_lookup(temp);
 
         vertices[i].x = (x * cos_r - y * sin_r) * scale;
         vertices[i].y = (x * sin_r + y * cos_r) * scale;
@@ -625,7 +643,7 @@ internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
         f32 sin_r = sinf(tilt);
 
         f32 temp = 4000 + radius / 4.0f;
-        vec3 color = galaxy_bb_color(temp);
+        vec3 color = galaxy_ct_lookup(temp);
 
         vertices[idx].x = (x * cos_r - y * sin_r) * scale;
         vertices[idx].y = (x * sin_r + y * cos_r) * scale;
