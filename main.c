@@ -56,6 +56,10 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define PLANCK_C1 3.74183e-16f
 #define PLANCK_C2 1.4388e-2f
 
+#define COLOR_TABLE_SIZE 1000
+#define TEMP_MIN         1000.0f
+#define TEMP_MAX         12000.0f
+
 typedef struct {
     f32 x, y, z;
     f32 r, g, b;
@@ -103,6 +107,8 @@ internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp);
 internal vec3 galaxy_spectrum_to_xyz(f32 temp);
 internal vec3 galaxy_xyz_to_rgb(vec3 xyz);
 internal vec3 galaxy_bb_color(f32 temp);
+internal void galaxy_ct_build(void);
+internal vec3 galaxy_ct_lookup(f32 temp);
 internal void galaxy_generate(galaxy_params *params, vertex *vertices);
 
 global const char *vert_shader_source =
@@ -143,6 +149,8 @@ global const char *frag_shader_source =
     "}\n"
     "frag_color = vec4(v_color, alpha);\n"
     "}\n\0";
+
+global vec3 color_table[COLOR_TABLE_SIZE];
 
 int main(void) {
     srand((u32)time(NULL));
@@ -299,6 +307,44 @@ internal platform platform_create(void) {
     plat.gl_ctx = gl_ctx;
 
     return plat;
+}
+
+internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
+    app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
+
+    switch (umsg) {
+        case WM_KEYDOWN: {
+            switch (wparam) {
+                case 'Q': state->galaxy_params->angular_offset += 0.00005f; break;
+                case 'A': state->galaxy_params->angular_offset -= 0.00005f; break;
+                case 'W': state->galaxy_params->ex_inner       += 0.02f;  break;
+                case 'S': state->galaxy_params->ex_inner       -= 0.02f;  break;
+                case 'E': state->galaxy_params->ex_outer       += 0.02f;  break;
+                case 'D': state->galaxy_params->ex_outer       -= 0.02f;  break;
+                default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
+            }
+            galaxy_generate(state->galaxy_params, state->vertices);
+            renderer_upload(state->renderer, state->vertices);
+            printf("offset: %f  ex_inner: %f ex_outer: %f\n", state->galaxy_params->angular_offset,
+                                                                      state->galaxy_params->ex_inner, 
+                                                                      state->galaxy_params->ex_outer);
+        } break;
+        case WM_SIZE: {
+            u32 width = LOWORD(lparam);
+            u32 height = HIWORD(lparam);
+            glViewport(0, 0, width, height);
+
+            renderer_draw(state->renderer);
+
+            SwapBuffers(state->platform->device_ctx);
+        } break;
+        case WM_CLOSE: {
+            state->is_running = false;
+        } break;
+    }
+
+    return DefWindowProcW(hwnd, umsg, wparam, lparam);
 }
 
 internal renderer renderer_create(void) {
@@ -589,42 +635,4 @@ internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
         vertices[idx].mag = 0.02f + 0.15f * (rand() * rand_scale);
         vertices[idx].type = 1.0f;
     }
-}
-
-internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
-    app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
-
-    switch (umsg) {
-        case WM_KEYDOWN: {
-            switch (wparam) {
-                case 'Q': state->galaxy_params->angular_offset += 0.00005f; break;
-                case 'A': state->galaxy_params->angular_offset -= 0.00005f; break;
-                case 'W': state->galaxy_params->ex_inner       += 0.02f;  break;
-                case 'S': state->galaxy_params->ex_inner       -= 0.02f;  break;
-                case 'E': state->galaxy_params->ex_outer       += 0.02f;  break;
-                case 'D': state->galaxy_params->ex_outer       -= 0.02f;  break;
-                default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
-            }
-            galaxy_generate(state->galaxy_params, state->vertices);
-            renderer_upload(state->renderer, state->vertices);
-            printf("offset: %f  ex_inner: %f ex_outer: %f\n", state->galaxy_params->angular_offset,
-                                                                      state->galaxy_params->ex_inner, 
-                                                                      state->galaxy_params->ex_outer);
-        } break;
-        case WM_SIZE: {
-            u32 width = LOWORD(lparam);
-            u32 height = HIWORD(lparam);
-            glViewport(0, 0, width, height);
-
-            renderer_draw(state->renderer);
-
-            SwapBuffers(state->platform->device_ctx);
-        } break;
-        case WM_CLOSE: {
-            state->is_running = false;
-        } break;
-    }
-
-    return DefWindowProcW(hwnd, umsg, wparam, lparam);
 }
