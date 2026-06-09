@@ -9,10 +9,8 @@
 #include "base_core.h"
 #include "base_math.h"
 #include "opengl.h"
-#include "blackbody.h"
 
 #include "base_math.c"
-#include "blackbody.c"
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
@@ -55,6 +53,9 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define CDF_STEPS  1000
 #define CDF_POINTS (CDF_STEPS / 2)
 
+#define PLANCK_C1 3.74183e-16f
+#define PLANCK_C2 1.4388e-2f
+
 typedef struct {
     f32 x, y, z;
     f32 r, g, b;
@@ -90,6 +91,7 @@ typedef struct {
 } app_t;
 
 internal platform_t platform_create(void);
+internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 internal renderer_t renderer_create(void);
 internal void renderer_draw(renderer_t *renderer);
 internal void renderer_upload(renderer_t *renderer, vertex_t *vertices);
@@ -97,8 +99,11 @@ internal f32 galaxy_ex(galaxy_params_t *params, f32 radius);
 internal f32 galaxy_brightness(f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative);
 internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
+internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp);
+internal vec3_t galaxy_spectrum_to_xyz(f32 temp);
+internal vec3_t galaxy_xyz_to_rgb(vec3_t xyz);
+internal vec3_t galaxy_bb_color(f32 temp);
 internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices);
-internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 
 global const char *vert_shader_source =
     "#version 450\n"
@@ -257,7 +262,7 @@ internal platform_t platform_create(void) {
 
     WNDCLASSW wnd_class = {
         .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-        .lpfnWndProc = window_proc,
+        .lpfnWndProc = platform_window_proc,
         .hInstance = mod_handle,
         .lpszClassName = CLASS_NAME,
         .hCursor = LoadCursorW(0, IDC_ARROW)
@@ -442,6 +447,91 @@ internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t) {
     return radii[i];
 }
 
+internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp) {
+    f32 wavelength_m = wavelength * 1e-9f;
+    return PLANCK_C1 / powf(wavelength_m, 5) / (expf(PLANCK_C2 / (wavelength_m * temp)) - 1);
+}
+
+internal vec3_t galaxy_spectrum_to_xyz(f32 temp) {
+    local_persist const f32 cie_color_match[81][3] = {
+        {0.0014f,0.0000f,0.0065f}, {0.0022f,0.0001f,0.0105f}, {0.0042f,0.0001f,0.0201f},
+        {0.0076f,0.0002f,0.0362f}, {0.0143f,0.0004f,0.0679f}, {0.0232f,0.0006f,0.1102f},
+        {0.0435f,0.0012f,0.2074f}, {0.0776f,0.0022f,0.3713f}, {0.1344f,0.0040f,0.6456f},
+        {0.2148f,0.0073f,1.0391f}, {0.2839f,0.0116f,1.3856f}, {0.3285f,0.0168f,1.6230f},
+        {0.3483f,0.0230f,1.7471f}, {0.3481f,0.0298f,1.7826f}, {0.3362f,0.0380f,1.7721f},
+        {0.3187f,0.0480f,1.7441f}, {0.2908f,0.0600f,1.6692f}, {0.2511f,0.0739f,1.5281f},
+        {0.1954f,0.0910f,1.2876f}, {0.1421f,0.1126f,1.0419f}, {0.0956f,0.1390f,0.8130f},
+        {0.0580f,0.1693f,0.6162f}, {0.0320f,0.2080f,0.4652f}, {0.0147f,0.2586f,0.3533f},
+        {0.0049f,0.3230f,0.2720f}, {0.0024f,0.4073f,0.2123f}, {0.0093f,0.5030f,0.1582f},
+        {0.0291f,0.6082f,0.1117f}, {0.0633f,0.7100f,0.0782f}, {0.1096f,0.7932f,0.0573f},
+        {0.1655f,0.8620f,0.0422f}, {0.2257f,0.9149f,0.0298f}, {0.2904f,0.9540f,0.0203f},
+        {0.3597f,0.9803f,0.0134f}, {0.4334f,0.9950f,0.0087f}, {0.5121f,1.0000f,0.0057f},
+        {0.5945f,0.9950f,0.0039f}, {0.6784f,0.9786f,0.0027f}, {0.7621f,0.9520f,0.0021f},
+        {0.8425f,0.9154f,0.0018f}, {0.9163f,0.8700f,0.0017f}, {0.9786f,0.8163f,0.0014f},
+        {1.0263f,0.7570f,0.0011f}, {1.0567f,0.6949f,0.0010f}, {1.0622f,0.6310f,0.0008f},
+        {1.0456f,0.5668f,0.0006f}, {1.0026f,0.5030f,0.0003f}, {0.9384f,0.4412f,0.0002f},
+        {0.8544f,0.3810f,0.0002f}, {0.7514f,0.3210f,0.0001f}, {0.6424f,0.2650f,0.0000f},
+        {0.5419f,0.2170f,0.0000f}, {0.4479f,0.1750f,0.0000f}, {0.3608f,0.1382f,0.0000f},
+        {0.2835f,0.1070f,0.0000f}, {0.2187f,0.0816f,0.0000f}, {0.1649f,0.0610f,0.0000f},
+        {0.1212f,0.0446f,0.0000f}, {0.0874f,0.0320f,0.0000f}, {0.0636f,0.0232f,0.0000f},
+        {0.0468f,0.0170f,0.0000f}, {0.0329f,0.0119f,0.0000f}, {0.0227f,0.0082f,0.0000f},
+        {0.0158f,0.0057f,0.0000f}, {0.0114f,0.0041f,0.0000f}, {0.0081f,0.0029f,0.0000f},
+        {0.0058f,0.0021f,0.0000f}, {0.0041f,0.0015f,0.0000f}, {0.0029f,0.0010f,0.0000f},
+        {0.0020f,0.0007f,0.0000f}, {0.0014f,0.0005f,0.0000f}, {0.0010f,0.0004f,0.0000f},
+        {0.0007f,0.0002f,0.0000f}, {0.0005f,0.0002f,0.0000f}, {0.0003f,0.0001f,0.0000f},
+        {0.0002f,0.0001f,0.0000f}, {0.0002f,0.0001f,0.0000f}, {0.0001f,0.0000f,0.0000f},
+        {0.0001f,0.0000f,0.0000f}, {0.0001f,0.0000f,0.0000f}, {0.0000f,0.0000f,0.0000f}
+    };
+
+    vec3_t xyz = {0};
+    for (i32 i = 0, lambda = 380; i < 81; i++, lambda += 5) {
+        f32 intensity = galaxy_bb_spectrum(lambda, temp);
+        xyz.x += intensity * cie_color_match[i][0];
+        xyz.y += intensity * cie_color_match[i][1];
+        xyz.z += intensity * cie_color_match[i][2];
+    }
+
+    f32 total = xyz.x + xyz.y + xyz.z;
+    xyz.x /= total;
+    xyz.y /= total;
+    xyz.z /= total;
+
+    return xyz;
+}
+
+internal vec3_t galaxy_xyz_to_rgb(vec3_t xyz) {
+    local_persist const mat3_t srgb = {{
+     3.2406f, -1.5372f, -0.4986f,
+    -0.9689f,  1.8758f,  0.0415f,
+     0.0557f, -0.2040f,  1.0570f
+    }};
+
+    return mat3_mul_vec3(srgb, xyz);
+}
+
+internal vec3_t galaxy_bb_color(f32 temp) {
+    vec3_t xyz = galaxy_spectrum_to_xyz(temp);
+    vec3_t rgb = galaxy_xyz_to_rgb(xyz);
+    
+    // constrain
+    f32 w = MIN(0, MIN(rgb.x, MIN(rgb.y, rgb.z)));
+    if (w < 0) {
+        rgb.x -= w;
+        rgb.y -= w;
+        rgb.z -= w;
+    }
+
+    // normalize
+    f32 m = MAX(rgb.x, MAX(rgb.y, rgb.z));
+    if (m > 0) {
+        rgb.x /= m;
+        rgb.y /= m;
+        rgb.z /= m;
+    }
+
+    return rgb;
+}
+
 internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
     f32 radii[CDF_POINTS];
     f32 cumulative[CDF_POINTS];
@@ -459,7 +549,7 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         f32 sin_r = sinf(tilt);
 
         f32 temp = 6000 + (4000 * rand() * rand_scale - 2000);
-        vec3_t color = blackbody_color(temp);
+        vec3_t color = galaxy_bb_color(temp);
 
         vertices[i].x = (x * cos_r - y * sin_r) * scale;
         vertices[i].y = (x * sin_r + y * cos_r) * scale;
@@ -489,7 +579,7 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         f32 sin_r = sinf(tilt);
 
         f32 temp = 4000 + radius / 4.0f;
-        vec3_t color = blackbody_color(temp);
+        vec3_t color = galaxy_bb_color(temp);
 
         vertices[idx].x = (x * cos_r - y * sin_r) * scale;
         vertices[idx].y = (x * sin_r + y * cos_r) * scale;
@@ -501,7 +591,7 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
     }
 }
 
-internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
+internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
     app_t *app = (app_t*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!app) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
