@@ -40,7 +40,10 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define NUM_STARS    60000
+#define NUM_STARS     60000
+#define NUM_DUST      NUM_STARS
+#define NUM_PARTICLES (NUM_STARS + NUM_DUST)
+
 #define RAD_GALAXY   15000.0f
 #define RAD_CORE     6000.0f
 #define RAD_FARFIELD (RAD_GALAXY * 2.0f)
@@ -56,6 +59,7 @@ typedef struct {
     f32 x, y, z;
     f32 r, g, b;
     f32 mag;
+    f32 type;
 } vertex_t;
 
 typedef struct {
@@ -101,22 +105,37 @@ global const char *vert_shader_source =
     "layout (location = 0) in vec3 a_pos;\n"
     "layout (location = 1) in vec3 a_color;\n"
     "layout (location = 2) in float a_mag;\n"
+    "layout (location = 3) in float a_type;\n"
     "out vec3 v_color;\n"
+    "flat out float v_type;\n"
     "void main()\n"
     "{\n"
     "gl_Position = vec4(a_pos, 1.0);\n"
-    "gl_PointSize = 4.0 * a_mag;\n"
+    "if (a_type == 0.0) {\n"
+        "gl_PointSize = 4.0 * a_mag;\n"
+    "}\n"
+    "else {\n"
+        "gl_PointSize = 5.0 * 70.0 * a_mag;\n"
+    "}\n"
     "v_color = a_color * a_mag;\n"
+    "v_type = a_type;\n"
     "}\n\0";
 
 global const char *frag_shader_source =
     "#version 450\n"
     "in vec3 v_color;\n"
+    "flat in float v_type;\n"
     "out vec4 frag_color;\n"
     "void main()\n"
     "{\n"
     "vec2 circ = 2.0 * gl_PointCoord - 1.0;\n"
-    "float alpha = 1 - length(circ);\n"
+    "float alpha;\n"
+    "if (v_type == 0.0) {\n"
+        "alpha = 1.0 - length(circ);\n"
+    "}\n"
+    "else {\n"
+        "alpha = 0.05 * (1.0 - length(circ));\n"
+    "}\n"
     "frag_color = vec4(v_color, alpha);\n"
     "}\n\0";
 
@@ -126,7 +145,7 @@ int main(void) {
     platform_t platform = platform_create();
     if (!platform.window) return 1;
 
-    vertex_t *vertices = (vertex_t *)malloc(NUM_STARS * sizeof(vertex_t));
+    vertex_t *vertices = (vertex_t *)malloc(NUM_PARTICLES * sizeof(vertex_t));
     if (!vertices) return 1;
 
     renderer_t renderer = renderer_create();
@@ -322,20 +341,28 @@ internal renderer_t renderer_create(void) {
         glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
 
-        glNamedBufferStorage(vbo, sizeof(vertex_t) * NUM_STARS, NULL, GL_DYNAMIC_STORAGE_BIT);
-
+        glNamedBufferStorage(vbo, sizeof(vertex_t) * NUM_PARTICLES, NULL, GL_DYNAMIC_STORAGE_BIT);
         glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex_t));
+
+        // pos
         glVertexArrayAttribBinding(vao, 0, 0);
         glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
         glEnableVertexArrayAttrib(vao, 0);
 
+        // color
         glVertexArrayAttribBinding(vao, 1, 0);
         glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 1);
 
+        // magnitude
         glVertexArrayAttribBinding(vao, 2, 0);
         glVertexArrayAttribFormat(vao, 2, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 2);
+
+        // type
+        glVertexArrayAttribBinding(vao, 3, 0);
+        glVertexArrayAttribFormat(vao, 3, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(f32));
+        glEnableVertexArrayAttrib(vao, 3);
     }
 
     glEnable(GL_BLEND);
@@ -353,11 +380,11 @@ internal void renderer_draw(renderer_t *renderer) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(renderer->vao);
     glUseProgram(renderer->shader_program);
-    glDrawArrays(GL_POINTS, 0, NUM_STARS);
+    glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
 }
 
 internal void renderer_upload(renderer_t *renderer, vertex_t *vertices) {
-    glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_STARS, vertices);
+    glNamedBufferSubData(renderer->vbo, 0, sizeof(vertex_t) * NUM_PARTICLES, vertices);
 }
 
 internal f32 galaxy_ex(galaxy_params_t *params, f32 radius) {
@@ -440,6 +467,37 @@ internal void galaxy_generate(galaxy_params_t *params, vertex_t *vertices) {
         vertices[i].g = color.y;
         vertices[i].b = color.z;
         vertices[i].mag = 0.1f + 0.4f * (rand() * rand_scale);
+        vertices[i].type = 0.0f;
+    }
+
+    for (i32 i = 0; i < NUM_DUST; i++) {
+        i32 idx = NUM_STARS + i;
+        f32 radius;
+        if (i % 2 == 0)
+            radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
+        else {
+            f32 x = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
+            f32 y = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
+            radius = sqrt(x * x + y * y);
+        }
+
+        f32 tilt = radius * params->angular_offset;
+        f32 theta = (rand() * rand_scale) * 2.0f * PI;
+        f32 x = cosf(theta) * radius;
+        f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
+        f32 cos_r = cosf(tilt);
+        f32 sin_r = sinf(tilt);
+
+        f32 temp = 4000 + radius / 4.0f;
+        vec3_t color = blackbody_color(temp);
+
+        vertices[idx].x = (x * cos_r - y * sin_r) * scale;
+        vertices[idx].y = (x * sin_r + y * cos_r) * scale;
+        vertices[idx].r = color.x;
+        vertices[idx].g = color.y;
+        vertices[idx].b = color.z;
+        vertices[idx].mag = 0.02f + 0.15f * (rand() * rand_scale);
+        vertices[idx].type = 1.0f;
     }
 }
 
