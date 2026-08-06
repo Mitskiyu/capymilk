@@ -60,6 +60,8 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define TEMP_MIN         1000.0f
 #define TEMP_MAX         12000.0f
 
+#define G          6.672e-11f
+
 typedef struct {
     f32 x, y, z;
     f32 r, g, b;
@@ -109,6 +111,9 @@ internal vec3 galaxy_xyz_to_rgb(vec3 xyz);
 internal vec3 galaxy_bb_color(f32 temp);
 internal void galaxy_ct_build(void);
 internal vec3 galaxy_ct_lookup(f32 temp);
+internal f32 galaxy_mass_disc(f32 r);
+internal f32 galaxy_mass_halo(f32 r);
+internal f32 galaxy_velocity_kms(f32 r);
 internal void galaxy_generate(galaxy_params *params, vertex *vertices);
 
 global const char *vert_shader_source =
@@ -594,6 +599,26 @@ internal vec3 galaxy_ct_lookup(f32 temp) {
     i = MAX(0, MIN(COLOR_TABLE_SIZE - 1, i)); // clamp
 
     return color_table[i];
+}
+
+internal f32 galaxy_mass_disc(f32 r) {
+    f32 disc_falloff = RAD_CORE / 3.0f;
+    f32 disc_thickness = 2000.0f;
+    f32 disc_density_center = 1.0f;
+
+    return disc_density_center * expf(-r / disc_falloff) * (r * r) * PI * disc_thickness;
+}
+
+internal f32 galaxy_mass_halo(f32 r) {
+    f32 halo_falloff = RAD_GALAXY / 6.0f;
+    f32 halo_density_center = 0.15f;
+
+    return halo_density_center * (1.0f / (1.0f + powf(r / halo_falloff, 2.0f))) * (4.0f * PI * powf(r, 3.0f) / 3.0f);
+}
+
+internal f32 galaxy_velocity_kms(f32 r) {
+    f32 mass_buffer = 100.0f;
+    return 20000.0f * sqrtf(G * (galaxy_mass_halo(r) + galaxy_mass_disc(r) + mass_buffer) / r) ;
 }
 
 internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
