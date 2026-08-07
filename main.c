@@ -64,6 +64,8 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define PC_TO_KM      3.08567758129e13f
 #define SEC_PER_YEAR  (365.25f * 86400.0f)
 
+#define TIME_SCALE (10000000.0f * SEC_PER_YEAR)
+
 typedef struct {
     f32 x, y, z;
     f32 r, g, b;
@@ -183,18 +185,28 @@ int main(void) {
         .galaxy_params = &params,
     };
 
-    SetWindowLongPtrW(plat.window, GWLP_USERDATA, (LONG_PTR)&state);
-
     galaxy_ct_build();
     galaxy_init(&params, vertices);
     renderer_upload(&render, vertices);
+
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
+
+    SetWindowLongPtrW(plat.window, GWLP_USERDATA, (LONG_PTR)&state);
+    LARGE_INTEGER start_time, end_time, tps;
+    QueryPerformanceFrequency(&tps);
+    QueryPerformanceCounter(&start_time);
     while (state.is_running) {
         MSG msg = {0};
         while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
+
+        QueryPerformanceCounter(&end_time);
+        u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
+        f32 elapsed_years = (elapsed_us / 1000000.0f) / (365.25f * 86400.0f) * TIME_SCALE;
+        galaxy_update(&params, vertices, elapsed_years);
+        renderer_upload(&render, vertices);
 
         // Draw
         renderer_draw(&render);
