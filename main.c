@@ -693,7 +693,9 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
 
         f32 tilt = radius * params->angular_offset;
         f32 theta = (rand() * rand_scale) * 2.0f * PI;
-        f32 ang_speed = galaxy_orbital_velocity(radius);
+        f32 b = radius * galaxy_ex(params, radius);
+        f32 avg_radius = (radius + b) / 2.0f;
+        f32 ang_speed = galaxy_orbital_velocity(avg_radius);
         f32 x = cosf(theta) * radius;
         f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
         f32 cos_r = cosf(tilt);
