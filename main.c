@@ -695,9 +695,9 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         vertices[idx].r = color.x;
         vertices[idx].g = color.y;
         vertices[idx].b = color.z;
-        vertices[i].radius = radius;
-        vertices[i].theta = theta;
-        vertices[i].ang_speed = ang_speed;
+        vertices[idx].radius = radius;
+        vertices[idx].theta = theta;
+        vertices[idx].ang_speed = ang_speed;
 
         vertices[idx].mag = 0.02f + 0.15f * (rand() * rand_scale);
         vertices[idx].type = 1.0f;
