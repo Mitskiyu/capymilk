@@ -60,7 +60,9 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define TEMP_MIN         1000.0f
 #define TEMP_MAX         12000.0f
 
-#define G          6.672e-11f
+#define G             6.672e-11f
+#define PC_TO_KM      3.08567758129e13f
+#define SEC_PER_YEAR  (365.25f * 86400.0f)
 
 typedef struct {
     f32 x, y, z;
@@ -114,6 +116,7 @@ internal vec3 galaxy_ct_lookup(f32 temp);
 internal f32 galaxy_mass_disc(f32 r);
 internal f32 galaxy_mass_halo(f32 r);
 internal f32 galaxy_velocity_kms(f32 r);
+internal f32 galaxy_orbital_velocity(f32 r);
 internal void galaxy_generate(galaxy_params *params, vertex *vertices);
 
 global const char *vert_shader_source =
@@ -619,6 +622,14 @@ internal f32 galaxy_mass_halo(f32 r) {
 internal f32 galaxy_velocity_kms(f32 r) {
     f32 mass_buffer = 100.0f;
     return 20000.0f * sqrtf(G * (galaxy_mass_halo(r) + galaxy_mass_disc(r) + mass_buffer) / r) ;
+}
+
+internal f32 galaxy_orbital_velocity(f32 r) {
+    f32 v = galaxy_velocity_kms(r);
+    f32 circ = 2.0f * PI * r * PC_TO_KM;
+    f32 time = circ / (v * SEC_PER_YEAR);
+
+    return 360.0f / time;
 }
 
 internal void galaxy_generate(galaxy_params *params, vertex *vertices) {
