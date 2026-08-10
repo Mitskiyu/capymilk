@@ -64,8 +64,6 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define PC_TO_KM      3.08567758129e13f
 #define SEC_PER_YEAR  (365.25f * 86400.0f)
 
-#define TIME_SCALE (10000000.0f * SEC_PER_YEAR)
-
 typedef struct {
     f32 x, y, z;
     f32 r, g, b;
@@ -90,9 +88,10 @@ typedef struct {
 } renderer;
 
 typedef struct {
-    f32 angular_offset;
+    f32 time_scale;
     f32 ex_inner;
     f32 ex_outer;
+    f32 angular_offset;
 } galaxy_params;
 
 typedef struct {
@@ -179,7 +178,12 @@ int main(void) {
     if (!vertices) return 1;
 
     renderer render = renderer_create();
-    galaxy_params params = {-0.0004f, 0.8f, 1.0f};
+    galaxy_params params = {
+        .time_scale = 10000000.0f,
+        .ex_inner = 0.8f,
+        .ex_outer = 1.0f,
+        .angular_offset = -0.0004f,
+    };
     app state = {
         .is_running = true,
         .vertices = vertices,
@@ -207,7 +211,7 @@ int main(void) {
 
         QueryPerformanceCounter(&end_time);
         u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
-        f32 elapsed_years = (elapsed_us / 1000000.0f) / (365.25f * 86400.0f) * TIME_SCALE;
+        f32 elapsed_years = (elapsed_us / 1000000.0f) * params.time_scale;
         galaxy_update(&params, vertices, elapsed_years);
         renderer_upload(&render, vertices);
 
@@ -344,19 +348,22 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
     switch (umsg) {
         case WM_KEYDOWN: {
             switch (wparam) {
-                case 'Q': state->galaxy_params->angular_offset += 0.00005f; break;
-                case 'A': state->galaxy_params->angular_offset -= 0.00005f; break;
-                case 'W': state->galaxy_params->ex_inner       += 0.02f;  break;
-                case 'S': state->galaxy_params->ex_inner       -= 0.02f;  break;
-                case 'E': state->galaxy_params->ex_outer       += 0.02f;  break;
-                case 'D': state->galaxy_params->ex_outer       -= 0.02f;  break;
+                case 'Q': state->galaxy_params->angular_offset += 0.00005f;    break;
+                case 'A': state->galaxy_params->angular_offset -= 0.00005f;    break;
+                case 'W': state->galaxy_params->ex_inner       += 0.02f;       break;
+                case 'S': state->galaxy_params->ex_inner       -= 0.02f;       break;
+                case 'E': state->galaxy_params->ex_outer       += 0.02f;       break;
+                case 'D': state->galaxy_params->ex_outer       -= 0.02f;       break;
+                case 'R': state->galaxy_params->time_scale     += 1000000.0f;  break;
+                case 'F': state->galaxy_params->time_scale     -= 1000000.0f;  break;
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
             galaxy_init(state->galaxy_params, state->vertices);
             renderer_upload(state->renderer, state->vertices);
-            printf("offset: %f  ex_inner: %f ex_outer: %f\n", state->galaxy_params->angular_offset,
-                                                                      state->galaxy_params->ex_inner, 
-                                                                      state->galaxy_params->ex_outer);
+            printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f\n", state->galaxy_params->angular_offset,
+                                                                                     state->galaxy_params->ex_inner, 
+                                                                                     state->galaxy_params->ex_outer,
+                                                                                     state->galaxy_params->time_scale);
         } break;
         case WM_SIZE: {
             u32 width = LOWORD(lparam);
