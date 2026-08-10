@@ -38,10 +38,6 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define NUM_STARS     60000
-#define NUM_DUST      NUM_STARS
-#define NUM_PARTICLES (NUM_STARS + NUM_DUST * 2)
-
 #define RAD_GALAXY   15000.0f
 #define RAD_CORE     6000.0f
 #define RAD_FARFIELD (RAD_GALAXY * 2.0f)
@@ -88,6 +84,8 @@ typedef struct {
 } renderer;
 
 typedef struct {
+    i32 num_stars;
+    i32 num_dust;
     f32 time_scale;
     f32 ex_inner;
     f32 ex_outer;
@@ -104,9 +102,10 @@ typedef struct {
 
 internal platform platform_create(void);
 internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
-internal renderer renderer_create(void);
-internal void renderer_draw(renderer *render);
-internal void renderer_upload(renderer *render, vertex *vertices);
+internal renderer renderer_create(i32 n);
+internal void renderer_resize(renderer *render, i32 n);
+internal void renderer_draw(renderer *render, i32 n);
+internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
 internal f32 galaxy_ex(galaxy_params *params, f32 radius);
 internal f32 galaxy_brightness(f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative);
@@ -174,16 +173,21 @@ int main(void) {
     platform plat = platform_create();
     if (!plat.window) return 1;
 
-    vertex *vertices = (vertex *)malloc(NUM_PARTICLES * sizeof(vertex));
-    if (!vertices) return 1;
-
-    renderer render = renderer_create();
     galaxy_params params = {
+        .num_stars = 60000,
+        .num_dust = 60000,
         .time_scale = 10000000.0f,
         .ex_inner = 0.8f,
         .ex_outer = 1.0f,
         .angular_offset = -0.0004f,
     };
+
+    i32 num_particles = params.num_stars + params.num_dust * 2;
+
+    vertex *vertices = (vertex *)malloc(num_particles * sizeof(vertex));
+    if (!vertices) return 1;
+
+    renderer render = renderer_create(num_particles);
     app state = {
         .is_running = true,
         .vertices = vertices,
@@ -194,7 +198,7 @@ int main(void) {
 
     galaxy_ct_build();
     galaxy_init(&params, vertices);
-    renderer_upload(&render, vertices);
+    renderer_upload(&render, vertices, num_particles);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
@@ -212,11 +216,13 @@ int main(void) {
         QueryPerformanceCounter(&end_time);
         u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
         f32 elapsed_years = (elapsed_us / 1000000.0f) * params.time_scale;
-        galaxy_update(&params, vertices, elapsed_years);
-        renderer_upload(&render, vertices);
+
+        galaxy_update(&params, state.vertices, elapsed_years);
+        num_particles = state.galaxy_params->num_stars + state.galaxy_params->num_dust * 2;
+        renderer_upload(&render, state.vertices, num_particles);
 
         // Draw
-        renderer_draw(&render);
+        renderer_draw(&render, num_particles);
 
         SwapBuffers(plat.device_ctx);
     }
@@ -345,6 +351,7 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
     app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
+    i32 num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
     switch (umsg) {
         case WM_KEYDOWN: {
             switch (wparam) {
@@ -356,21 +363,49 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
                 case 'D': state->galaxy_params->ex_outer       -= 0.02f;       break;
                 case 'R': state->galaxy_params->time_scale     += 1000000.0f;  break;
                 case 'F': state->galaxy_params->time_scale     -= 1000000.0f;  break;
+                case 'T': { 
+                    state->galaxy_params->num_stars += 1000; 
+                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
+                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
+                    renderer_resize(state->renderer, num_particles);
+                } break;
+                case 'G': { 
+                    state->galaxy_params->num_stars -= 1000; 
+                    if (state->galaxy_params->num_stars < 0) state->galaxy_params->num_stars = 0;
+                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
+                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
+                    renderer_resize(state->renderer, num_particles);
+                } break;
+                case 'Y': { 
+                    state->galaxy_params->num_dust += 1000; 
+                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
+                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
+                    renderer_resize(state->renderer, num_particles);
+                } break;
+                case 'H': { 
+                    state->galaxy_params->num_dust -= 1000; 
+                    if (state->galaxy_params->num_dust < 0) state->galaxy_params->num_dust = 0;
+                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
+                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
+                    renderer_resize(state->renderer, num_particles);
+                } break;
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
             galaxy_init(state->galaxy_params, state->vertices);
-            renderer_upload(state->renderer, state->vertices);
-            printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f\n", state->galaxy_params->angular_offset,
+            renderer_upload(state->renderer, state->vertices, num_particles);
+            printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d\n", state->galaxy_params->angular_offset,
                                                                                      state->galaxy_params->ex_inner, 
                                                                                      state->galaxy_params->ex_outer,
-                                                                                     state->galaxy_params->time_scale);
+                                                                                     state->galaxy_params->time_scale,
+                                                                                     state->galaxy_params->num_stars,
+                                                                                     state->galaxy_params->num_dust);
         } break;
         case WM_SIZE: {
             u32 width = LOWORD(lparam);
             u32 height = HIWORD(lparam);
             glViewport(0, 0, width, height);
 
-            renderer_draw(state->renderer);
+            renderer_draw(state->renderer, num_particles);
 
             SwapBuffers(state->platform->device_ctx);
         } break;
@@ -382,7 +417,7 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
     return DefWindowProcW(hwnd, umsg, wparam, lparam);
 }
 
-internal renderer renderer_create(void) {
+internal renderer renderer_create(i32 n) {
     renderer render = {0};
 
     GLuint shader_program = 0;
@@ -422,13 +457,9 @@ internal renderer renderer_create(void) {
         glDeleteShader(fragment_shader);
     }
 
-    GLuint vbo = 0, vao = 0;
+    GLuint vao = 0;
     {
-        glCreateBuffers(1, &vbo);
         glCreateVertexArrays(1, &vao);
-
-        glNamedBufferStorage(vbo, sizeof(vertex) * NUM_PARTICLES, NULL, GL_DYNAMIC_STORAGE_BIT);
-        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(vertex));
 
         // pos
         glVertexArrayAttribBinding(vao, 0, 0);
@@ -451,26 +482,34 @@ internal renderer renderer_create(void) {
         glEnableVertexArrayAttrib(vao, 3);
     }
 
+    render.shader_program = shader_program;
+    render.vao = vao;
+    renderer_resize(&render, n);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     glEnable(GL_PROGRAM_POINT_SIZE);
 
-    render.shader_program = shader_program;
-    render.vao = vao;
-    render.vbo = vbo;
-
     return render;
 }
 
-internal void renderer_draw(renderer *render) {
+internal void renderer_resize(renderer *render, i32 n) {
+    if (render->vbo) glDeleteBuffers(1, &render->vbo);
+
+    glCreateBuffers(1, &render->vbo);
+    glNamedBufferStorage(render->vbo, sizeof(vertex) * n, NULL, GL_DYNAMIC_STORAGE_BIT);
+    glVertexArrayVertexBuffer(render->vao, 0, render->vbo, 0, sizeof(vertex));
+}
+
+internal void renderer_draw(renderer *render, i32 n) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(render->vao);
     glUseProgram(render->shader_program);
-    glDrawArrays(GL_POINTS, 0, NUM_PARTICLES);
+    glDrawArrays(GL_POINTS, 0, n);
 }
 
-internal void renderer_upload(renderer *render, vertex *vertices) {
-    glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * NUM_PARTICLES, vertices);
+internal void renderer_upload(renderer *render, vertex *vertices, i32 n) {
+    glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * n, vertices);
 }
 
 internal f32 galaxy_ex(galaxy_params *params, f32 radius) {
@@ -665,7 +704,7 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
 
     f32 scale = 0.5f / RAD_GALAXY;
     f32 rand_scale = 1.0f / RAND_MAX;
-    for (i32 i = 0; i < NUM_STARS; i++) {
+    for (i32 i = 0; i < params->num_stars; i++) {
         f32 radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
         f32 tilt = radius * params->angular_offset;
         f32 theta = (rand() * rand_scale) * 2.0f * PI;
@@ -690,8 +729,8 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         vertices[i].type = 0.0f;
     }
 
-    for (i32 i = 0; i < NUM_DUST; i++) {
-        i32 idx = NUM_STARS + i;
+    for (i32 i = 0; i < params->num_dust; i++) {
+        i32 idx = params->num_stars + i;
         f32 radius;
         if (i % 2 == 0)
             radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
@@ -727,8 +766,8 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         vertices[idx].type = 1.0f;
     }
 
-    i32 idx = NUM_STARS + NUM_DUST;
-    for (i32 i = 0; i < NUM_DUST / 100; i++) {
+    i32 idx = params->num_stars + params->num_dust;
+    for (i32 i = 0; i < params->num_dust / 100; i++) {
         f32 x = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
         f32 y = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
         f32 origin = sqrt(x * x + y * y);
@@ -769,8 +808,9 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
 
 internal void galaxy_update(galaxy_params *params, vertex *vertices, f32 elapsed_years) {
     f32 scale = 0.5f / RAD_GALAXY;
+    i32 num_particles = params->num_stars + params->num_dust * 2;
 
-    for (i32 i = 0; i < NUM_PARTICLES; i++) {
+    for (i32 i = 0; i < num_particles; i++) {
         f32 radius = vertices[i].radius;
         f32 start_ang = vertices[i].theta;
         f32 ang_speed = vertices[i].ang_speed;
