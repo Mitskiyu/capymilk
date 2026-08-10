@@ -56,13 +56,12 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define SEC_PER_YEAR  (365.25f * 86400.0f)
 
 typedef struct {
-    f32 x, y, z;
-    f32 r, g, b;
-    f32 radius;
-    f32 theta;
-    f32 ang_speed;
-    f32 mag;
-    f32 type;
+    vec3 color;
+    f32  radius;
+    f32  theta;
+    f32  ang_speed;
+    f32  mag;
+    f32  type;
 } vertex;
 
 typedef struct {
@@ -104,6 +103,7 @@ internal renderer renderer_create(i32 n);
 internal void renderer_resize(renderer *render, i32 n);
 internal void renderer_draw(const renderer *render, i32 n);
 internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
+internal void renderer_update(renderer *render, galaxy_params *params, f32 elapsed_years);
 internal f32 galaxy_ex(const galaxy_params *params, f32 radius);
 internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 rad_core, f32 rad_galaxy);
@@ -119,7 +119,6 @@ internal f32 galaxy_mass_halo(f32 rad_galaxy, f32 r);
 internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
 internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
 internal void galaxy_init(galaxy_params *params, vertex *vertices);
-internal void galaxy_update(const galaxy_params *params, vertex *vertices, f32 elapsed_years);
 
 global vec3 color_table[COLOR_TABLE_SIZE];
 
@@ -175,8 +174,8 @@ int main(void) {
         u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
         f32 elapsed_years = (elapsed_us / 1000000.0f) * params.time_scale;
 
-        galaxy_update(&params, state.vertices, elapsed_years);
         num_particles = state.galaxy_params->num_stars + state.galaxy_params->num_dust * 2;
+        renderer_update(&render, &params, elapsed_years);
         renderer_upload(&render, state.vertices, num_particles);
 
         // Draw
@@ -482,25 +481,35 @@ internal renderer renderer_create(i32 n) {
     {
         glCreateVertexArrays(1, &vao);
 
-        // pos
+        // color
         glVertexArrayAttribBinding(vao, 0, 0);
         glVertexArrayAttribFormat(vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
         glEnableVertexArrayAttrib(vao, 0);
 
-        // color
+        // radius
         glVertexArrayAttribBinding(vao, 1, 0);
-        glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32));
+        glVertexArrayAttribFormat(vao, 1, 1, GL_FLOAT, GL_FALSE, 3 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 1);
 
-        // magnitude
+        // theta
         glVertexArrayAttribBinding(vao, 2, 0);
-        glVertexArrayAttribFormat(vao, 2, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(f32));
+        glVertexArrayAttribFormat(vao, 2, 1, GL_FLOAT, GL_FALSE, 4 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 2);
 
-        // type
+        // ang_speed
         glVertexArrayAttribBinding(vao, 3, 0);
-        glVertexArrayAttribFormat(vao, 3, 1, GL_FLOAT, GL_FALSE, 10 * sizeof(f32));
+        glVertexArrayAttribFormat(vao, 3, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(f32));
         glEnableVertexArrayAttrib(vao, 3);
+
+        // mag
+        glVertexArrayAttribBinding(vao, 4, 0);
+        glVertexArrayAttribFormat(vao, 4, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(f32));
+        glEnableVertexArrayAttrib(vao, 4);
+
+        // type
+        glVertexArrayAttribBinding(vao, 5, 0);
+        glVertexArrayAttribFormat(vao, 5, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(f32));
+        glEnableVertexArrayAttrib(vao, 5);
     }
 
     render.shader_program = shader_program;
@@ -533,6 +542,16 @@ internal void renderer_upload(renderer *render, vertex *vertices, i32 n) {
     glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * n, vertices);
 }
 
+internal void renderer_update(renderer *render, galaxy_params *params, f32 elapsed_years) {
+    GLuint shader = render->shader_program;
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_elapsed_years"),  elapsed_years);
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_ex_inner"),       params->ex_inner);
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_ex_outer"),       params->ex_outer);
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_rad_core"),       params->rad_core);
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_rad_galaxy"),     params->rad_galaxy);
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_angular_offset"), params->angular_offset);
+}
+
 internal f32 galaxy_ex(const galaxy_params *params, f32 radius) {
     f32 rad_farfield = params->rad_galaxy * 2;
     if (radius < params->rad_core) {
@@ -544,9 +563,7 @@ internal f32 galaxy_ex(const galaxy_params *params, f32 radius) {
     } else if (radius < rad_farfield) {
         f32 t = (radius - params->rad_galaxy) / (rad_farfield - params->rad_galaxy);
         return params->ex_outer + t * (1.0f - params->ex_outer);
-    } else {
-        return 1.0f;
-    }
+    } else return 1.0f;
 }
 
 internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius) {
@@ -743,35 +760,27 @@ internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r) {
     f32 circ = 2.0f * PI * r * PC_TO_KM;
     f32 time = circ / (v * SEC_PER_YEAR);
 
-    return 360.0f / time;
+    return (360.0f / time) * (PI / 180.0f);
 }
 
 internal void galaxy_init(galaxy_params *params, vertex *vertices) {
     f32 radii[CDF_POINTS], cumulative[CDF_POINTS], inverse[CDF_POINTS];
     galaxy_cdf_build(radii, cumulative, inverse, params->rad_core, params->rad_galaxy);
 
-    f32 scale = 0.5f / params->rad_galaxy;
     f32 rand_scale = 1.0f / RAND_MAX;
     for (i32 i = 0; i < params->num_stars; i++) {
         f32 radius = galaxy_cdf_sample(inverse, rand() * rand_scale);
-        f32 tilt = radius * params->angular_offset;
-        f32 theta = (rand() * rand_scale) * 2.0f * PI;
+        f32 theta0 = (rand() * rand_scale) * 2.0f * PI;
         f32 ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, radius);
-        f32 x = cosf(theta) * radius;
-        f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
-        f32 cos_r = cosf(tilt);
-        f32 sin_r = sinf(tilt);
 
         f32 temp = 6000 + (4000 * rand() * rand_scale - 2000);
         vec3 color = galaxy_ct_lookup(temp);
 
-        vertices[i].x = (x * cos_r - y * sin_r) * scale;
-        vertices[i].y = (x * sin_r + y * cos_r) * scale;
-        vertices[i].r = color.x;
-        vertices[i].g = color.y;
-        vertices[i].b = color.z;
+        vertices[i].color.x = color.x;
+        vertices[i].color.y = color.y;
+        vertices[i].color.z = color.z;
         vertices[i].radius = radius;
-        vertices[i].theta = theta;
+        vertices[i].theta = theta0;
         vertices[i].ang_speed = ang_speed;
         vertices[i].mag = 0.1f + 0.4f * (rand() * rand_scale);
         vertices[i].type = 0.0f;
@@ -788,28 +797,20 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
             radius = sqrt(x * x + y * y);
         }
 
-        f32 tilt = radius * params->angular_offset;
         f32 theta = (rand() * rand_scale) * 2.0f * PI;
         f32 b = radius * galaxy_ex(params, radius);
         f32 avg_radius = (radius + b) / 2.0f;
         f32 ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, avg_radius);
-        f32 x = cosf(theta) * radius;
-        f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
-        f32 cos_r = cosf(tilt);
-        f32 sin_r = sinf(tilt);
 
         f32 temp = 4000 + radius / 4.0f;
         vec3 color = galaxy_ct_lookup(temp);
 
-        vertices[idx].x = (x * cos_r - y * sin_r) * scale;
-        vertices[idx].y = (x * sin_r + y * cos_r) * scale;
-        vertices[idx].r = color.x;
-        vertices[idx].g = color.y;
-        vertices[idx].b = color.z;
+        vertices[idx].color.x = color.x;
+        vertices[idx].color.y = color.y;
+        vertices[idx].color.z = color.z;
         vertices[idx].radius = radius;
         vertices[idx].theta = theta;
         vertices[idx].ang_speed = ang_speed;
-
         vertices[idx].mag = 0.02f + 0.15f * (rand() * rand_scale);
         vertices[idx].type = 1.0f;
     }
@@ -826,52 +827,23 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         i32 n = (i32)(100 * (rand() * rand_scale));
         for (i32 j = 0; j < n; j++) {
             f32 radius = origin + 200 - 400 * (rand() * rand_scale);
-            f32 tilt = radius * params->angular_offset;
             f32 theta = origin_theta + (10.0f - 20.0f * (rand() * rand_scale)) * (PI / 180.0f);
             f32 b = radius * galaxy_ex(params, radius);
-            f32 x = cosf(theta) * radius;
-            f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
             f32 avg_radius = (radius + b) / 2.0f;
-            f32 cos_r = cosf(tilt);
-            f32 sin_r = sinf(tilt);
+            f32 ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, avg_radius);
 
             f32 temp = 4000 + radius / 4.5f - 1000;
             vec3 color = galaxy_ct_lookup(temp);
 
-            vertices[idx].x = (x * cos_r - y * sin_r) * scale;
-            vertices[idx].y = (x * sin_r + y * cos_r) * scale;
-            vertices[idx].r = color.x;
-            vertices[idx].g = color.y;
-            vertices[idx].b = color.z;
+            vertices[idx].color.x = color.x;
+            vertices[idx].color.y = color.y;
+            vertices[idx].color.z = color.z;
             vertices[idx].radius = radius;
             vertices[idx].theta = theta;
-            vertices[idx].ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, avg_radius);
-
+            vertices[idx].ang_speed = ang_speed;
             vertices[idx].mag = mag + 0.025f * (rand() * rand_scale);
             vertices[idx].type = 2.0f;
             idx++;
         }
-    }
-}
-
-internal void galaxy_update(const galaxy_params *params, vertex *vertices, f32 elapsed_years) {
-    f32 scale = 0.5f / params->rad_galaxy;
-    i32 num_particles = params->num_stars + params->num_dust * 2;
-
-    for (i32 i = 0; i < num_particles; i++) {
-        f32 radius = vertices[i].radius;
-        f32 start_ang = vertices[i].theta;
-        f32 ang_speed = vertices[i].ang_speed;
-        f32 ang_speed_rad = ang_speed * (PI / 180.0f);
-        f32 theta = start_ang + ang_speed_rad * elapsed_years;
-
-        f32 tilt = radius * params->angular_offset;
-        f32 x = cosf(theta) * radius;
-        f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
-        f32 cos_r = cosf(tilt);
-        f32 sin_r = sinf(tilt);
-
-        vertices[i].x = (x * cos_r - y * sin_r) * scale;
-        vertices[i].y = (x * sin_r + y * cos_r) * scale;
     }
 }
