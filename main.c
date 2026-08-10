@@ -105,8 +105,8 @@ internal void renderer_draw(renderer *render, i32 n);
 internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
 internal f32 galaxy_ex(galaxy_params *params, f32 radius);
 internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius);
-internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 rad_core, f32 rad_galaxy);
-internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
+internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 rad_core, f32 rad_galaxy);
+internal f32 galaxy_cdf_sample(f32 *inverse, f32 p);
 internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp);
 internal vec3 galaxy_spectrum_to_xyz(f32 temp);
 internal vec3 galaxy_xyz_to_rgb(vec3 xyz);
@@ -545,9 +545,10 @@ internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius) {
     }
 }
 
-internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 rad_core, f32 rad_galaxy) {
+internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 rad_core, f32 rad_galaxy) {
     f32 rad_farfield = rad_galaxy * 2;
-    f32 step = (rad_farfield) / CDF_STEPS;
+    f32 step = rad_farfield / CDF_STEPS;
+    f32 h = 1.0f / (CDF_POINTS - 1);
 
     f32 total = 0;
     for (i32 i = 0; i < CDF_POINTS; i++) {
@@ -562,19 +563,43 @@ internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 rad_core, f32 ra
         cumulative[i] = total;
     }
 
+    // normalize
     f32 max = cumulative[CDF_POINTS - 1];
     for (i32 i = 0; i < CDF_POINTS; i++) {
         cumulative[i] /= max;
     }
+
+    for (i32 i = 0; i < CDF_POINTS; i++) {
+        f32 p = i * h;
+
+        i32 lo = 0, hi = CDF_POINTS - 1;
+        while (lo < hi) {
+            i32 mid = lo + (hi - lo) / 2;
+            if (p > cumulative[mid]) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+
+        if (lo == 0) {
+            inverse[i] = radii[0];
+        }
+        else {
+            f32 t = (p - cumulative[lo-1]) / (cumulative[lo] - cumulative[lo-1]);
+            inverse[i] = radii[lo-1] + t * (radii[lo] - radii[lo-1]);
+        }
+    }
 }
 
-internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t) {
-    i32 i = 0;
-    while (t > cumulative[i] && i < CDF_POINTS - 1) {
-        i++;
-    }
+internal f32 galaxy_cdf_sample(f32 *inverse, f32 p) {
+    f32 h = 1.0f / (CDF_POINTS - 1);
+    i32 i = (i32)(p / h);
+    if (i >= CDF_POINTS - 1)
+        return inverse[CDF_POINTS-1];
 
-    return radii[i];
+    f32 t = (p - i * h) / h;
+    return inverse[i] + t * (inverse[i+1] - inverse[i]);
 }
 
 internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp) {
@@ -708,14 +733,13 @@ internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r) {
 }
 
 internal void galaxy_init(galaxy_params *params, vertex *vertices) {
-    f32 radii[CDF_POINTS];
-    f32 cumulative[CDF_POINTS];
-    galaxy_cdf_build(radii, cumulative, params->rad_core, params->rad_galaxy);
+    f32 radii[CDF_POINTS], cumulative[CDF_POINTS], inverse[CDF_POINTS];
+    galaxy_cdf_build(radii, cumulative, inverse, params->rad_core, params->rad_galaxy);
 
     f32 scale = 0.5f / params->rad_galaxy;
     f32 rand_scale = 1.0f / RAND_MAX;
     for (i32 i = 0; i < params->num_stars; i++) {
-        f32 radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
+        f32 radius = galaxy_cdf_sample(inverse, rand() * rand_scale);
         f32 tilt = radius * params->angular_offset;
         f32 theta = (rand() * rand_scale) * 2.0f * PI;
         f32 ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, radius);
@@ -743,7 +767,7 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         i32 idx = params->num_stars + i;
         f32 radius;
         if (i % 2 == 0)
-            radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
+            radius = galaxy_cdf_sample(inverse, rand() * rand_scale);
         else {
             f32 x = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
             f32 y = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
