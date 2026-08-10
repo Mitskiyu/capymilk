@@ -38,13 +38,8 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
-#define RAD_GALAXY   15000.0f
-#define RAD_CORE     6000.0f
-#define RAD_FARFIELD (RAD_GALAXY * 2.0f)
-
 #define I0_BULGE   1.0f
 #define K          0.02f
-#define A          (RAD_GALAXY / 3.0f)
 
 #define CDF_STEPS  1000
 #define CDF_POINTS (CDF_STEPS / 2)
@@ -86,6 +81,8 @@ typedef struct {
 typedef struct {
     i32 num_stars;
     i32 num_dust;
+    f32 rad_core;
+    f32 rad_galaxy;
     f32 time_scale;
     f32 ex_inner;
     f32 ex_outer;
@@ -107,8 +104,8 @@ internal void renderer_resize(renderer *render, i32 n);
 internal void renderer_draw(renderer *render, i32 n);
 internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
 internal f32 galaxy_ex(galaxy_params *params, f32 radius);
-internal f32 galaxy_brightness(f32 radius);
-internal void galaxy_cdf_build(f32 *radii, f32 *cumulative);
+internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius);
+internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 rad_core, f32 rad_galaxy);
 internal f32 galaxy_cdf_sample(f32 *radii, f32 *cumulative, f32 t);
 internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp);
 internal vec3 galaxy_spectrum_to_xyz(f32 temp);
@@ -116,10 +113,10 @@ internal vec3 galaxy_xyz_to_rgb(vec3 xyz);
 internal vec3 galaxy_bb_color(f32 temp);
 internal void galaxy_ct_build(void);
 internal vec3 galaxy_ct_lookup(f32 temp);
-internal f32 galaxy_mass_disc(f32 r);
-internal f32 galaxy_mass_halo(f32 r);
-internal f32 galaxy_velocity_kms(f32 r);
-internal f32 galaxy_orbital_velocity(f32 r);
+internal f32 galaxy_mass_disc(f32 rad_core, f32 r);
+internal f32 galaxy_mass_halo(f32 rad_galaxy, f32 r);
+internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
+internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
 internal void galaxy_init(galaxy_params *params, vertex *vertices);
 internal void galaxy_update(galaxy_params *params, vertex *vertices, f32 elapsed_years);
 
@@ -176,6 +173,8 @@ int main(void) {
     galaxy_params params = {
         .num_stars = 60000,
         .num_dust = 60000,
+        .rad_core = 6000.0f,
+        .rad_galaxy = 15000.0f,
         .time_scale = 10000000.0f,
         .ex_inner = 0.8f,
         .ex_outer = 1.0f,
@@ -389,16 +388,24 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
                     state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
                     renderer_resize(state->renderer, num_particles);
                 } break;
+                case 'U': state->galaxy_params->rad_core        += 100.0f;      break;
+                case 'J': state->galaxy_params->rad_core        -= 100.0f;      break;
+                case 'I': state->galaxy_params->rad_galaxy      += 100.0f;      break;
+                case 'K': state->galaxy_params->rad_galaxy      -= 100.0f;      break;
+
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
             galaxy_init(state->galaxy_params, state->vertices);
             renderer_upload(state->renderer, state->vertices, num_particles);
-            printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d\n", state->galaxy_params->angular_offset,
-                                                                                     state->galaxy_params->ex_inner, 
-                                                                                     state->galaxy_params->ex_outer,
-                                                                                     state->galaxy_params->time_scale,
-                                                                                     state->galaxy_params->num_stars,
-                                                                                     state->galaxy_params->num_dust);
+            printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d rad_core %.0f rad_galaxy %.0f\n",
+                state->galaxy_params->angular_offset,
+                state->galaxy_params->ex_inner, 
+                state->galaxy_params->ex_outer,
+                state->galaxy_params->time_scale,
+                state->galaxy_params->num_stars,
+                state->galaxy_params->num_dust,
+                state->galaxy_params->rad_core,
+                state->galaxy_params->rad_galaxy);
         } break;
         case WM_SIZE: {
             u32 width = LOWORD(lparam);
@@ -513,40 +520,43 @@ internal void renderer_upload(renderer *render, vertex *vertices, i32 n) {
 }
 
 internal f32 galaxy_ex(galaxy_params *params, f32 radius) {
-    if (radius < RAD_CORE) {
-        f32 t = radius / RAD_CORE;
+    f32 rad_farfield = params->rad_galaxy * 2;
+    if (radius < params->rad_core) {
+        f32 t = radius / params->rad_core;
         return 1.0f + t * (params->ex_inner - 1.0f);
-    } else if (radius < RAD_GALAXY) {
-        f32 t = (radius - RAD_CORE) / (RAD_GALAXY - RAD_CORE);
+    } else if (radius < params->rad_galaxy) {
+        f32 t = (radius - params->rad_core) / (params->rad_galaxy - params->rad_core);
         return params->ex_inner + t * (params->ex_outer - params->ex_inner);
-    } else if (radius < RAD_FARFIELD) {
-        f32 t = (radius - RAD_GALAXY) / (RAD_FARFIELD - RAD_GALAXY);
+    } else if (radius < rad_farfield) {
+        f32 t = (radius - params->rad_galaxy) / (rad_farfield - params->rad_galaxy);
         return params->ex_outer + t * (1.0f - params->ex_outer);
     } else {
         return 1.0f;
     }
 }
 
-internal f32 galaxy_brightness(f32 radius) {
-    if (radius < RAD_CORE) {
+internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius) {
+    f32 a = rad_galaxy / 3.0f;
+    if (radius < rad_core) {
         return I0_BULGE * expf(-K * powf(radius, 0.25f));
     } else {
-        f32 i0_disk = I0_BULGE * expf(-K * powf(RAD_CORE, 0.25f));
-        return i0_disk * expf(-(radius - RAD_CORE) / A);
+        f32 i0_disk = I0_BULGE * expf(-K * powf(rad_core, 0.25f));
+        return i0_disk * expf(-(radius - rad_core) / a);
     }
 }
 
-internal void galaxy_cdf_build(f32 *radii, f32 *cumulative) {
-    f32 step = (RAD_FARFIELD) / CDF_STEPS;
+internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 rad_core, f32 rad_galaxy) {
+    f32 rad_farfield = rad_galaxy * 2;
+    f32 step = (rad_farfield) / CDF_STEPS;
 
     f32 total = 0;
     for (i32 i = 0; i < CDF_POINTS; i++) {
         f32 l = (i*2) * step;
         f32 m = (i*2 + 1) * step;
         f32 r = (i*2 + 2) * step;
-        total += step / 3 * (galaxy_brightness(l) +
-                             galaxy_brightness(m) * 4 +
-                             galaxy_brightness(r));
+        total += step / 3 * (galaxy_brightness(rad_core, rad_galaxy, l) +
+                             galaxy_brightness(rad_core, rad_galaxy, m) * 4 +
+                             galaxy_brightness(rad_core, rad_galaxy, r));
 
         radii[i] = r;
         cumulative[i] = total;
@@ -669,28 +679,28 @@ internal vec3 galaxy_ct_lookup(f32 temp) {
     return color_table[i];
 }
 
-internal f32 galaxy_mass_disc(f32 r) {
-    f32 disc_falloff = RAD_CORE / 3.0f;
+internal f32 galaxy_mass_disc(f32 rad_core, f32 r) {
+    f32 disc_falloff = rad_core / 3.0f;
     f32 disc_thickness = 2000.0f;
     f32 disc_density_center = 1.0f;
 
     return disc_density_center * expf(-r / disc_falloff) * (r * r) * PI * disc_thickness;
 }
 
-internal f32 galaxy_mass_halo(f32 r) {
-    f32 halo_falloff = RAD_GALAXY / 6.0f;
+internal f32 galaxy_mass_halo(f32 rad_galaxy, f32 r) {
+    f32 halo_falloff = rad_galaxy / 6.0f;
     f32 halo_density_center = 0.15f;
 
     return halo_density_center * (1.0f / (1.0f + powf(r / halo_falloff, 2.0f))) * (4.0f * PI * powf(r, 3.0f) / 3.0f);
 }
 
-internal f32 galaxy_velocity_kms(f32 r) {
+internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r) {
     f32 mass_buffer = 100.0f;
-    return 20000.0f * sqrtf(G * (galaxy_mass_halo(r) + galaxy_mass_disc(r) + mass_buffer) / r) ;
+    return 20000.0f * sqrtf(G * (galaxy_mass_halo(rad_galaxy, r) + galaxy_mass_disc(rad_core, r) + mass_buffer) / r) ;
 }
 
-internal f32 galaxy_orbital_velocity(f32 r) {
-    f32 v = galaxy_velocity_kms(r);
+internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r) {
+    f32 v = galaxy_velocity_kms(rad_core, rad_galaxy, r);
     f32 circ = 2.0f * PI * r * PC_TO_KM;
     f32 time = circ / (v * SEC_PER_YEAR);
 
@@ -700,15 +710,15 @@ internal f32 galaxy_orbital_velocity(f32 r) {
 internal void galaxy_init(galaxy_params *params, vertex *vertices) {
     f32 radii[CDF_POINTS];
     f32 cumulative[CDF_POINTS];
-    galaxy_cdf_build(radii, cumulative);
+    galaxy_cdf_build(radii, cumulative, params->rad_core, params->rad_galaxy);
 
-    f32 scale = 0.5f / RAD_GALAXY;
+    f32 scale = 0.5f / params->rad_galaxy;
     f32 rand_scale = 1.0f / RAND_MAX;
     for (i32 i = 0; i < params->num_stars; i++) {
         f32 radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
         f32 tilt = radius * params->angular_offset;
         f32 theta = (rand() * rand_scale) * 2.0f * PI;
-        f32 ang_speed = galaxy_orbital_velocity(radius);
+        f32 ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, radius);
         f32 x = cosf(theta) * radius;
         f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
         f32 cos_r = cosf(tilt);
@@ -735,8 +745,8 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         if (i % 2 == 0)
             radius = galaxy_cdf_sample(radii, cumulative, rand() * rand_scale);
         else {
-            f32 x = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
-            f32 y = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
+            f32 x = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
+            f32 y = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
             radius = sqrt(x * x + y * y);
         }
 
@@ -744,7 +754,7 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         f32 theta = (rand() * rand_scale) * 2.0f * PI;
         f32 b = radius * galaxy_ex(params, radius);
         f32 avg_radius = (radius + b) / 2.0f;
-        f32 ang_speed = galaxy_orbital_velocity(avg_radius);
+        f32 ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, avg_radius);
         f32 x = cosf(theta) * radius;
         f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
         f32 cos_r = cosf(tilt);
@@ -768,8 +778,8 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
 
     i32 idx = params->num_stars + params->num_dust;
     for (i32 i = 0; i < params->num_dust / 100; i++) {
-        f32 x = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
-        f32 y = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
+        f32 x = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
+        f32 y = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
         f32 origin = sqrt(x * x + y * y);
 
         f32 origin_theta =  (rand() * rand_scale) * 2.0f * PI;
@@ -797,7 +807,7 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
             vertices[idx].b = color.z;
             vertices[idx].radius = radius;
             vertices[idx].theta = theta;
-            vertices[idx].ang_speed = galaxy_orbital_velocity(avg_radius);
+            vertices[idx].ang_speed = galaxy_orbital_velocity(params->rad_core, params->rad_galaxy, avg_radius);
 
             vertices[idx].mag = mag + 0.025f * (rand() * rand_scale);
             vertices[idx].type = 2.0f;
@@ -807,7 +817,7 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
 }
 
 internal void galaxy_update(galaxy_params *params, vertex *vertices, f32 elapsed_years) {
-    f32 scale = 0.5f / RAD_GALAXY;
+    f32 scale = 0.5f / params->rad_galaxy;
     i32 num_particles = params->num_stars + params->num_dust * 2;
 
     for (i32 i = 0; i < num_particles; i++) {
