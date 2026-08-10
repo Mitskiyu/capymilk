@@ -98,6 +98,7 @@ typedef struct {
 } app;
 
 internal platform platform_create(void);
+internal char *platform_read_file(const char *path);
 internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 internal renderer renderer_create(i32 n);
 internal void renderer_resize(renderer *render, i32 n);
@@ -119,48 +120,6 @@ internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
 internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
 internal void galaxy_init(galaxy_params *params, vertex *vertices);
 internal void galaxy_update(const galaxy_params *params, vertex *vertices, f32 elapsed_years);
-
-global const char *vert_shader_source =
-    "#version 450\n"
-    "layout (location = 0) in vec3 a_pos;\n"
-    "layout (location = 1) in vec3 a_color;\n"
-    "layout (location = 2) in float a_mag;\n"
-    "layout (location = 3) in float a_type;\n"
-    "out vec3 v_color;\n"
-    "flat out float v_type;\n"
-    "void main()\n"
-    "{\n"
-    "gl_Position = vec4(a_pos, 1.0);\n"
-    "if (a_type == 0.0) {\n"
-        "gl_PointSize = 4.0 * a_mag;\n"
-    "}\n"
-    "else if (a_type == 1.0) {\n"
-        "gl_PointSize = 5.0 * 70.0 * a_mag;\n"
-    "}\n"
-    "else if (a_type == 2.0) {\n"
-        "gl_PointSize = 1.0 * 70.0 * a_mag;\n"
-    "}\n"
-    "v_color = a_color * a_mag;\n"
-    "v_type = a_type;\n"
-    "}\n\0";
-
-global const char *frag_shader_source =
-    "#version 450\n"
-    "in vec3 v_color;\n"
-    "flat in float v_type;\n"
-    "out vec4 frag_color;\n"
-    "void main()\n"
-    "{\n"
-    "vec2 circ = 2.0 * gl_PointCoord - 1.0;\n"
-    "float alpha;\n"
-    "if (v_type == 0.0) {\n"
-        "alpha = 1.0 - length(circ);\n"
-    "}\n"
-    "else {\n"
-        "alpha = 0.05 * (1.0 - length(circ));\n"
-    "}\n"
-    "frag_color = vec4(v_color, alpha);\n"
-    "}\n\0";
 
 global vec3 color_table[COLOR_TABLE_SIZE];
 
@@ -346,6 +305,32 @@ internal platform platform_create(void) {
     return plat;
 }
 
+internal char *platform_read_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) return NULL;
+
+    fseek(f, 0L, SEEK_END);
+    i32 size = (i32)ftell(f);
+    rewind(f);
+
+    char *buf = (char *)malloc(size + 1);
+    if (buf == NULL) {
+        fclose(f);
+        return NULL;
+    }
+
+    i32 read = (i32)fread(buf, 1, size, f);
+    fclose(f);
+
+    if (read != size) {
+        free(buf);
+        return NULL; 
+    }
+
+    buf[size] = '\0';
+    return buf;
+}
+
 internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
     app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
@@ -432,22 +417,44 @@ internal renderer renderer_create(i32 n) {
         i32 ok = 0;
         char info_log[512];
 
+        char *vert_source = platform_read_file("galaxy.vert");
+        if (vert_source == NULL) {
+            printf("failed to load galaxy.vert\n");
+            return render;
+        }
+
+        char *frag_source = platform_read_file("galaxy.frag");
+        if (frag_source == NULL) {
+            printf("failed to load galaxy.frag\n");
+            free(vert_source);
+            return render;
+        }
+
         GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertex_shader, 1, &vert_shader_source, NULL);
+        glShaderSource(vertex_shader, 1, (const char**)&vert_source, NULL);
         glCompileShader(vertex_shader);
         glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &ok);
         if (!ok) {
             glGetShaderInfoLog(vertex_shader, 512, NULL, info_log);
             printf("vertex shader failed to compile: %s\n", info_log);
+            free(vert_source);
+            free(frag_source);
+            glDeleteShader(vertex_shader);
+            return render;
         }
 
         GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment_shader, 1, &frag_shader_source, NULL);
+        glShaderSource(fragment_shader, 1, (const char**)&frag_source, NULL);
         glCompileShader(fragment_shader);
         glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &ok);
         if (!ok) {
             glGetShaderInfoLog(fragment_shader, 512, NULL, info_log);
             printf("fragment shader failed to compile: %s\n", info_log);
+            free(vert_source);
+            free(frag_source);
+            glDeleteShader(vertex_shader);
+            glDeleteShader(fragment_shader);
+            return render;
         }
 
         shader_program = glCreateProgram();
@@ -458,8 +465,15 @@ internal renderer renderer_create(i32 n) {
         if (!ok) {
             glGetProgramInfoLog(shader_program, 512, NULL, info_log);
             printf("shader program failed to link: %s\n", info_log);
+            free(vert_source);
+            free(frag_source);
+            glDeleteShader(vertex_shader);
+            glDeleteShader(fragment_shader);
+            return render;
         }
 
+        free(vert_source);
+        free(frag_source);
         glDeleteShader(vertex_shader);
         glDeleteShader(fragment_shader);
     }
