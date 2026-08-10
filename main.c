@@ -40,7 +40,7 @@ global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 
 #define NUM_STARS     60000
 #define NUM_DUST      NUM_STARS
-#define NUM_PARTICLES (NUM_STARS + NUM_DUST)
+#define NUM_PARTICLES (NUM_STARS + NUM_DUST * 2)
 
 #define RAD_GALAXY   15000.0f
 #define RAD_CORE     6000.0f
@@ -139,8 +139,11 @@ global const char *vert_shader_source =
     "if (a_type == 0.0) {\n"
         "gl_PointSize = 4.0 * a_mag;\n"
     "}\n"
-    "else {\n"
+    "else if (a_type == 1.0) {\n"
         "gl_PointSize = 5.0 * 70.0 * a_mag;\n"
+    "}\n"
+    "else if (a_type == 2.0) {\n"
+        "gl_PointSize = 1.0 * 70.0 * a_mag;\n"
     "}\n"
     "v_color = a_color * a_mag;\n"
     "v_type = a_type;\n"
@@ -717,6 +720,44 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
         vertices[idx].type = 1.0f;
     }
 
+    i32 idx = NUM_STARS + NUM_DUST;
+    for (i32 i = 0; i < NUM_DUST / 100; i++) {
+        f32 x = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
+        f32 y = 2 * RAD_GALAXY * (rand() * rand_scale) - RAD_GALAXY;
+        f32 origin = sqrt(x * x + y * y);
+
+        f32 origin_theta =  (rand() * rand_scale) * 2.0f * PI;
+        f32 mag = 0.1f + 0.05f * (rand() * rand_scale);
+        
+        i32 n = (i32)(100 * (rand() * rand_scale));
+        for (i32 j = 0; j < n; j++) {
+            f32 radius = origin + 200 - 400 * (rand() * rand_scale);
+            f32 tilt = radius * params->angular_offset;
+            f32 theta = origin_theta + (10.0f - 20.0f * (rand() * rand_scale)) * (PI / 180.0f);
+            f32 b = radius * galaxy_ex(params, radius);
+            f32 x = cosf(theta) * radius;
+            f32 y = sinf(theta) * radius * galaxy_ex(params, radius);
+            f32 avg_radius = (radius + b) / 2.0f;
+            f32 cos_r = cosf(tilt);
+            f32 sin_r = sinf(tilt);
+
+            f32 temp = 4000 + radius / 4.5f - 1000;
+            vec3 color = galaxy_ct_lookup(temp);
+
+            vertices[idx].x = (x * cos_r - y * sin_r) * scale;
+            vertices[idx].y = (x * sin_r + y * cos_r) * scale;
+            vertices[idx].r = color.x;
+            vertices[idx].g = color.y;
+            vertices[idx].b = color.z;
+            vertices[idx].radius = radius;
+            vertices[idx].theta = theta;
+            vertices[idx].ang_speed = galaxy_orbital_velocity(avg_radius);
+
+            vertices[idx].mag = mag + 0.025f * (rand() * rand_scale);
+            vertices[idx].type = 2.0f;
+            idx++;
+        }
+    }
 }
 
 internal void galaxy_update(galaxy_params *params, vertex *vertices, f32 elapsed_years) {
