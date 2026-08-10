@@ -101,12 +101,12 @@ internal platform platform_create(void);
 internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 internal renderer renderer_create(i32 n);
 internal void renderer_resize(renderer *render, i32 n);
-internal void renderer_draw(renderer *render, i32 n);
+internal void renderer_draw(const renderer *render, i32 n);
 internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
-internal f32 galaxy_ex(galaxy_params *params, f32 radius);
+internal f32 galaxy_ex(const galaxy_params *params, f32 radius);
 internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 rad_core, f32 rad_galaxy);
-internal f32 galaxy_cdf_sample(f32 *inverse, f32 p);
+internal f32 galaxy_cdf_sample(const f32 *inverse, f32 p);
 internal f32 galaxy_bb_spectrum(i32 wavelength, f32 temp);
 internal vec3 galaxy_spectrum_to_xyz(f32 temp);
 internal vec3 galaxy_xyz_to_rgb(vec3 xyz);
@@ -118,7 +118,7 @@ internal f32 galaxy_mass_halo(f32 rad_galaxy, f32 r);
 internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
 internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
 internal void galaxy_init(galaxy_params *params, vertex *vertices);
-internal void galaxy_update(galaxy_params *params, vertex *vertices, f32 elapsed_years);
+internal void galaxy_update(const galaxy_params *params, vertex *vertices, f32 elapsed_years);
 
 global const char *vert_shader_source =
     "#version 450\n"
@@ -508,7 +508,7 @@ internal void renderer_resize(renderer *render, i32 n) {
     glVertexArrayVertexBuffer(render->vao, 0, render->vbo, 0, sizeof(vertex));
 }
 
-internal void renderer_draw(renderer *render, i32 n) {
+internal void renderer_draw(const renderer *render, i32 n) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(render->vao);
     glUseProgram(render->shader_program);
@@ -519,7 +519,7 @@ internal void renderer_upload(renderer *render, vertex *vertices, i32 n) {
     glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * n, vertices);
 }
 
-internal f32 galaxy_ex(galaxy_params *params, f32 radius) {
+internal f32 galaxy_ex(const galaxy_params *params, f32 radius) {
     f32 rad_farfield = params->rad_galaxy * 2;
     if (radius < params->rad_core) {
         f32 t = radius / params->rad_core;
@@ -592,7 +592,7 @@ internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 ra
     }
 }
 
-internal f32 galaxy_cdf_sample(f32 *inverse, f32 p) {
+internal f32 galaxy_cdf_sample(const f32 *inverse, f32 p) {
     f32 h = 1.0f / (CDF_POINTS - 1);
     i32 i = (i32)(p / h);
     if (i >= CDF_POINTS - 1)
@@ -840,7 +840,7 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
     }
 }
 
-internal void galaxy_update(galaxy_params *params, vertex *vertices, f32 elapsed_years) {
+internal void galaxy_update(const galaxy_params *params, vertex *vertices, f32 elapsed_years) {
     f32 scale = 0.5f / params->rad_galaxy;
     i32 num_particles = params->num_stars + params->num_dust * 2;
 
