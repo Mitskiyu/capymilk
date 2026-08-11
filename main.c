@@ -80,6 +80,7 @@ typedef struct {
 typedef struct {
     i32 num_stars;
     i32 num_dust;
+    i32 num_particles;
     f32 rad_core;
     f32 rad_galaxy;
     f32 time_scale;
@@ -139,12 +140,12 @@ int main(void) {
         .angular_offset = -0.0004f,
     };
 
-    i32 num_particles = params.num_stars + params.num_dust * 2;
+    i32 capacity = params.num_stars + params.num_dust * 2;
 
-    vertex *vertices = (vertex *)malloc(num_particles * sizeof(vertex));
+    vertex *vertices = (vertex *)malloc(capacity * sizeof(vertex));
     if (!vertices) return 1;
 
-    renderer render = renderer_create(num_particles);
+    renderer render = renderer_create(capacity);
     app state = {
         .is_running = true,
         .vertices = vertices,
@@ -155,7 +156,7 @@ int main(void) {
 
     galaxy_ct_build();
     galaxy_init(&params, vertices);
-    renderer_upload(&render, vertices, num_particles);
+    renderer_upload(&render, vertices, params.num_particles);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
@@ -174,12 +175,9 @@ int main(void) {
         u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
         f32 elapsed_years = (elapsed_us / 1000000.0f) * params.time_scale;
 
-        num_particles = state.galaxy_params->num_stars + state.galaxy_params->num_dust * 2;
         renderer_update(&render, &params, elapsed_years);
-        renderer_upload(&render, state.vertices, num_particles);
-
-        // Draw
-        renderer_draw(&render, num_particles);
+        renderer_upload(&render, state.vertices, params.num_particles);
+        renderer_draw(&render, params.num_particles);
 
         SwapBuffers(plat.device_ctx);
     }
@@ -334,9 +332,9 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
     app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
-    i32 num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
     switch (umsg) {
         case WM_KEYDOWN: {
+            b32 update_count = false;
             switch (wparam) {
                 case 'Q': state->galaxy_params->angular_offset += 0.00005f;    break;
                 case 'A': state->galaxy_params->angular_offset -= 0.00005f;    break;
@@ -348,29 +346,23 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
                 case 'F': state->galaxy_params->time_scale     -= 1000000.0f;  break;
                 case 'T': { 
                     state->galaxy_params->num_stars += 1000; 
-                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
-                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
-                    renderer_resize(state->renderer, num_particles);
+                    update_count = true;
                 } break;
                 case 'G': { 
                     state->galaxy_params->num_stars -= 1000; 
-                    if (state->galaxy_params->num_stars < 0) state->galaxy_params->num_stars = 0;
-                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
-                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
-                    renderer_resize(state->renderer, num_particles);
+                    if (state->galaxy_params->num_stars < 0) 
+                        state->galaxy_params->num_stars = 0;
+                    update_count = true;
                 } break;
                 case 'Y': { 
                     state->galaxy_params->num_dust += 1000; 
-                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
-                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
-                    renderer_resize(state->renderer, num_particles);
+                    update_count = true;
                 } break;
                 case 'H': { 
                     state->galaxy_params->num_dust -= 1000; 
-                    if (state->galaxy_params->num_dust < 0) state->galaxy_params->num_dust = 0;
-                    num_particles = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
-                    state->vertices = (vertex*)realloc(state->vertices, num_particles * sizeof(vertex));
-                    renderer_resize(state->renderer, num_particles);
+                    if (state->galaxy_params->num_dust < 0) 
+                        state->galaxy_params->num_dust = 0;
+                    update_count = true;
                 } break;
                 case 'U': state->galaxy_params->rad_core        += 100.0f;      break;
                 case 'J': state->galaxy_params->rad_core        -= 100.0f;      break;
@@ -379,8 +371,15 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
 
                 default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
             }
+
+            if (update_count) {
+                i32 capacity = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
+                state->vertices = (vertex*)realloc(state->vertices, capacity * sizeof(vertex));
+                renderer_resize(state->renderer, capacity);
+            }
+            
             galaxy_init(state->galaxy_params, state->vertices);
-            renderer_upload(state->renderer, state->vertices, num_particles);
+            renderer_upload(state->renderer, state->vertices, state->galaxy_params->num_particles);
             printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d rad_core %.0f rad_galaxy %.0f\n",
                 state->galaxy_params->angular_offset,
                 state->galaxy_params->ex_inner, 
@@ -396,7 +395,7 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
             u32 height = HIWORD(lparam);
             glViewport(0, 0, width, height);
 
-            renderer_draw(state->renderer, num_particles);
+            renderer_draw(state->renderer, state->galaxy_params->num_particles);
 
             SwapBuffers(state->platform->device_ctx);
         } break;
@@ -846,4 +845,6 @@ internal void galaxy_init(galaxy_params *params, vertex *vertices) {
             idx++;
         }
     }
+
+    params->num_particles = idx;
 }
