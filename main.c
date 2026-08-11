@@ -69,7 +69,7 @@ typedef struct {
     HWND      window;
     HDC       device_ctx;
     HGLRC     gl_ctx;
-} platform;
+} window;
 
 typedef struct {
     GLuint vao;
@@ -93,14 +93,14 @@ typedef struct {
     u32           seed; 
     b32           is_running;
     vertex        *vertices;
-    platform      *platform;
+    window        *window;
     renderer      *renderer;
     galaxy_params *galaxy_params;
 } app;
 
-internal platform platform_create(void);
 internal char *platform_read_file(const char *path);
-internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
+internal window window_create(void);
+internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 internal renderer renderer_create(i32 n);
 internal void renderer_resize(renderer *render, i32 n);
 internal void renderer_draw(const renderer *render, i32 n);
@@ -127,8 +127,8 @@ global vec3 color_table[COLOR_TABLE_SIZE];
 int main(void) {
     u32 seed = (u32)time(NULL);
 
-    platform plat = platform_create();
-    if (!plat.window) return 1;
+    window win = window_create();
+    if (!win.window) return 1;
 
     galaxy_params params = {
         .num_stars = 60000,
@@ -151,7 +151,7 @@ int main(void) {
         .seed = seed,
         .is_running = true,
         .vertices = vertices,
-        .platform = &plat,
+        .window = &win,
         .renderer = &render,
         .galaxy_params = &params,
     };
@@ -162,7 +162,7 @@ int main(void) {
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
-    SetWindowLongPtrW(plat.window, GWLP_USERDATA, (LONG_PTR)&state);
+    SetWindowLongPtrW(win.window, GWLP_USERDATA, (LONG_PTR)&state);
     LARGE_INTEGER start_time, end_time, tps;
     QueryPerformanceFrequency(&tps);
     QueryPerformanceCounter(&start_time);
@@ -181,14 +181,14 @@ int main(void) {
         renderer_upload(&render, state.vertices, params.num_particles);
         renderer_draw(&render, params.num_particles);
 
-        SwapBuffers(plat.device_ctx);
+        SwapBuffers(win.device_ctx);
     }
 
     return 0;
 }
 
-internal platform platform_create(void) {
-    platform plat = {0};
+internal window window_create(void) {
+    window win = {0};
 
     HINSTANCE mod_handle = GetModuleHandle(NULL);
     i32 pixel_format = 0;
@@ -198,13 +198,13 @@ internal platform platform_create(void) {
             .hInstance = mod_handle,
             .lpszClassName = DUMMY_CLASS_NAME
         };
-        if (!RegisterClassW(&dummy_wnd_class)) return plat;  // log
+        if (!RegisterClassW(&dummy_wnd_class)) return win;  // log
 
         HWND dummy_wnd = CreateWindowW(
             DUMMY_CLASS_NAME, L"", WS_TILEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
             CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, mod_handle, NULL
         );
-        if (!dummy_wnd) return plat;
+        if (!dummy_wnd) return win;
 
         HDC dummy_dc = GetDC(dummy_wnd);
 
@@ -221,7 +221,7 @@ internal platform platform_create(void) {
         SetPixelFormat(dummy_dc, pf, &pfd);
 
         HGLRC dummy_gl_context = wglCreateContext(dummy_dc);
-        if (!dummy_gl_context) return plat;  // log
+        if (!dummy_gl_context) return win;  // log
 
         wglMakeCurrent(dummy_dc, dummy_gl_context);
 
@@ -265,21 +265,21 @@ internal platform platform_create(void) {
 
     WNDCLASSW wnd_class = {
         .style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-        .lpfnWndProc = platform_window_proc,
+        .lpfnWndProc = window_proc,
         .hInstance = mod_handle,
         .lpszClassName = CLASS_NAME,
         .hCursor = LoadCursorW(0, IDC_ARROW)
     };
-    if (!RegisterClassW(&wnd_class)) return plat;  // log
+    if (!RegisterClassW(&wnd_class)) return win;  // log
 
-    HWND window = CreateWindowExW(
+    HWND hwnd = CreateWindowExW(
         0, CLASS_NAME, L"Capymilk", WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
         CW_USEDEFAULT, 1024, 1024, NULL, NULL, mod_handle,
         NULL
     );
-    if (!window) return plat;  // log
+    if (!hwnd) return win;  // log
 
-    HDC dc = GetDC(window);
+    HDC dc = GetDC(hwnd);
 
     PIXELFORMATDESCRIPTOR pfd = {0};
     DescribePixelFormat(dc, pixel_format, sizeof(PIXELFORMATDESCRIPTOR), &pfd);
@@ -292,16 +292,16 @@ internal platform platform_create(void) {
     };
 
     HGLRC gl_ctx = wglCreateContextAttribsARB(dc, NULL, ctx_attribs);
-    if (!gl_ctx) return plat;  // log
+    if (!gl_ctx) return win;  // log
     b32 ok = wglMakeCurrent(dc, gl_ctx);
-    if (!ok) return plat;  // log
+    if (!ok) return win;  // log
     
-    plat.mod_handle = mod_handle;
-    plat.window = window;
-    plat.device_ctx = dc;
-    plat.gl_ctx = gl_ctx;
+    win.mod_handle = mod_handle;
+    win.window = hwnd;
+    win.device_ctx = dc;
+    win.gl_ctx = gl_ctx;
 
-    return plat;
+    return win;
 }
 
 internal char *platform_read_file(const char *path) {
@@ -330,7 +330,7 @@ internal char *platform_read_file(const char *path) {
     return buf;
 }
 
-internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
+internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
     app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
     if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
@@ -399,7 +399,7 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
 
             renderer_draw(state->renderer, state->galaxy_params->num_particles);
 
-            SwapBuffers(state->platform->device_ctx);
+            SwapBuffers(state->window->device_ctx);
         } break;
         case WM_CLOSE: {
             state->is_running = false;
