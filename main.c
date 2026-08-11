@@ -90,6 +90,7 @@ typedef struct {
 } galaxy_params;
 
 typedef struct {
+    u32           seed; 
     b32           is_running;
     vertex        *vertices;
     platform      *platform;
@@ -119,12 +120,12 @@ internal f32 galaxy_mass_disc(f32 rad_core, f32 r);
 internal f32 galaxy_mass_halo(f32 rad_galaxy, f32 r);
 internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
 internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
-internal void galaxy_init(galaxy_params *params, vertex *vertices);
+internal void galaxy_init(galaxy_params *params, vertex *vertices, u32 seed);
 
 global vec3 color_table[COLOR_TABLE_SIZE];
 
 int main(void) {
-    srand((u32)time(NULL));
+    u32 seed = (u32)time(NULL);
 
     platform plat = platform_create();
     if (!plat.window) return 1;
@@ -147,6 +148,7 @@ int main(void) {
 
     renderer render = renderer_create(capacity);
     app state = {
+        .seed = seed,
         .is_running = true,
         .vertices = vertices,
         .platform = &plat,
@@ -155,7 +157,7 @@ int main(void) {
     };
 
     galaxy_ct_build();
-    galaxy_init(&params, vertices);
+    galaxy_init(&params, vertices, seed);
     renderer_upload(&render, vertices, params.num_particles);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
@@ -378,7 +380,7 @@ internal LRESULT platform_window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
                 renderer_resize(state->renderer, capacity);
             }
             
-            galaxy_init(state->galaxy_params, state->vertices);
+            galaxy_init(state->galaxy_params, state->vertices, state->seed);
             renderer_upload(state->renderer, state->vertices, state->galaxy_params->num_particles);
             printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d rad_core %.0f rad_galaxy %.0f\n",
                 state->galaxy_params->angular_offset,
@@ -762,7 +764,8 @@ internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r) {
     return (360.0f / time) * (PI / 180.0f);
 }
 
-internal void galaxy_init(galaxy_params *params, vertex *vertices) {
+internal void galaxy_init(galaxy_params *params, vertex *vertices, u32 seed) {
+    srand(seed);
     f32 radii[CDF_POINTS], cumulative[CDF_POINTS], inverse[CDF_POINTS];
     galaxy_cdf_build(radii, cumulative, inverse, params->rad_core, params->rad_galaxy);
 
