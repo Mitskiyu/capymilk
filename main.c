@@ -72,7 +72,7 @@ typedef struct {
     f32  ang_speed;
     f32  mag;
     f32  type;
-} vertex;
+} galaxy_vertex;
 
 typedef struct {
     b8        keys[256];
@@ -104,12 +104,12 @@ typedef struct {
 } galaxy;
 
 typedef struct {
-    u32      seed; 
-    u64      start_us;
-    vertex   *vertices;
-    window   *window;
-    renderer *renderer;
-    galaxy   *galaxy;
+    u32             seed; 
+    u64             start_us;
+    window          *window;
+    renderer        *renderer;
+    galaxy          *galaxy;
+    galaxy_vertex   *vertices;
 } app;
 
 internal void app_update(app *state);
@@ -119,11 +119,11 @@ internal u64 platform_time_usec(void);
 internal window window_create(u32 width, u32 height, wchar_t *name);
 internal void window_process_events(window *win);
 internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
-internal renderer renderer_create(i32 n);
-internal void renderer_resize(renderer *render, i32 n);
-internal void renderer_draw(const renderer *render, i32 n);
-internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
-internal void renderer_update(renderer *render, galaxy *glx, f32 elapsed_years, f32 aspect_ratio);
+internal renderer galaxy_renderer_create(i32 n);
+internal void galaxy_renderer_resize(renderer *render, i32 n);
+internal void galaxy_renderer_draw(const renderer *render, i32 n);
+internal void galaxy_renderer_upload(renderer *render, galaxy_vertex *vertices, i32 n);
+internal void galaxy_renderer_update(renderer *render, galaxy *glx, f32 elapsed_years, f32 aspect_ratio);
 internal f32 galaxy_ex(const galaxy *glx, f32 radius);
 internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 rad_core, f32 rad_galaxy);
@@ -138,7 +138,7 @@ internal f32 galaxy_mass_disc(f32 rad_core, f32 r);
 internal f32 galaxy_mass_halo(f32 rad_galaxy, f32 r);
 internal f32 galaxy_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
 internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
-internal void galaxy_init(galaxy *glx, vertex *vertices, u32 seed);
+internal void galaxy_init(galaxy *glx, galaxy_vertex *vertices, u32 seed);
 
 global vec3 color_table[COLOR_TABLE_SIZE];
 global u64  perf_freq = 1;
@@ -166,10 +166,10 @@ int main(void) {
 
     i32 capacity = glx.num_stars + glx.num_dust * 2;
 
-    vertex *vertices = (vertex *)malloc(capacity * sizeof(vertex));
+    galaxy_vertex *vertices = (galaxy_vertex *)malloc(capacity * sizeof(galaxy_vertex));
     if (!vertices) return 1;
 
-    renderer render = renderer_create(capacity);
+    renderer render = galaxy_renderer_create(capacity);
 
     u64 start_us = platform_time_usec();
     app state = {
@@ -186,7 +186,7 @@ int main(void) {
 
     galaxy_ct_build();
     galaxy_init(&glx, vertices, seed);
-    renderer_upload(&render, vertices, glx.num_particles);
+    galaxy_renderer_upload(&render, vertices, glx.num_particles);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
@@ -243,10 +243,10 @@ internal void app_update(app *state) {
 
     if (should_update) {
         i32 capacity = state->galaxy->num_stars + state->galaxy->num_dust * 2;
-        state->vertices = (vertex*)realloc(state->vertices, capacity * sizeof(vertex));
-        renderer_resize(state->renderer, capacity);
+        state->vertices = (galaxy_vertex*)realloc(state->vertices, capacity * sizeof(galaxy_vertex));
+        galaxy_renderer_resize(state->renderer, capacity);
         galaxy_init(state->galaxy, state->vertices, state->seed);
-        renderer_upload(state->renderer, state->vertices, state->galaxy->num_particles);
+        galaxy_renderer_upload(state->renderer, state->vertices, state->galaxy->num_particles);
     }
 
     if (key_hit) {
@@ -271,9 +271,9 @@ internal void app_draw(void *ctx) {
     last_frame_us = now_us;
 
     f32 aspect_ratio = (f32)state->window->width / state->window->height;
-    renderer_update(state->renderer, state->galaxy, elapsed_years, aspect_ratio);
+    galaxy_renderer_update(state->renderer, state->galaxy, elapsed_years, aspect_ratio);
     glViewport(0, 0, state->window->width, state->window->height);
-    renderer_draw(state->renderer, state->galaxy->num_particles);
+    galaxy_renderer_draw(state->renderer, state->galaxy->num_particles);
     SwapBuffers(state->window->device_ctx);
 }
 
@@ -480,7 +480,7 @@ internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
     return 0;
 }
 
-internal renderer renderer_create(i32 n) {
+internal renderer galaxy_renderer_create(i32 n) {
     renderer render = {0};
 
     GLuint shader_program = 0;
@@ -586,7 +586,7 @@ internal renderer renderer_create(i32 n) {
 
     render.shader_program = shader_program;
     render.vao = vao;
-    renderer_resize(&render, n);
+    galaxy_renderer_resize(&render, n);
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -595,26 +595,26 @@ internal renderer renderer_create(i32 n) {
     return render;
 }
 
-internal void renderer_resize(renderer *render, i32 n) {
+internal void galaxy_renderer_resize(renderer *render, i32 n) {
     if (render->vbo) glDeleteBuffers(1, &render->vbo);
 
     glCreateBuffers(1, &render->vbo);
-    glNamedBufferStorage(render->vbo, sizeof(vertex) * n, NULL, GL_DYNAMIC_STORAGE_BIT);
-    glVertexArrayVertexBuffer(render->vao, 0, render->vbo, 0, sizeof(vertex));
+    glNamedBufferStorage(render->vbo, sizeof(galaxy_vertex) * n, NULL, GL_DYNAMIC_STORAGE_BIT);
+    glVertexArrayVertexBuffer(render->vao, 0, render->vbo, 0, sizeof(galaxy_vertex));
 }
 
-internal void renderer_draw(const renderer *render, i32 n) {
+internal void galaxy_renderer_draw(const renderer *render, i32 n) {
     glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(render->vao);
     glUseProgram(render->shader_program);
     glDrawArrays(GL_POINTS, 0, n);
 }
 
-internal void renderer_upload(renderer *render, vertex *vertices, i32 n) {
-    glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * n, vertices);
+internal void galaxy_renderer_upload(renderer *render, galaxy_vertex *vertices, i32 n) {
+    glNamedBufferSubData(render->vbo, 0, sizeof(galaxy_vertex) * n, vertices);
 }
 
-internal void renderer_update(renderer *render, galaxy *glx, f32 elapsed_years, f32 aspect_ratio) {
+internal void galaxy_renderer_update(renderer *render, galaxy *glx, f32 elapsed_years, f32 aspect_ratio) {
     GLuint shader = render->shader_program;
     glProgramUniform1f(shader, glGetUniformLocation(shader, "u_aspect_ratio"),   aspect_ratio);
     glProgramUniform1f(shader, glGetUniformLocation(shader, "u_elapsed_years"),  elapsed_years);
@@ -836,7 +836,7 @@ internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r) {
     return (360.0f / time) * (PI / 180.0f);
 }
 
-internal void galaxy_init(galaxy *glx, vertex *vertices, u32 seed) {
+internal void galaxy_init(galaxy *glx, galaxy_vertex *vertices, u32 seed) {
     srand(seed);
     f32 radii[CDF_POINTS], cumulative[CDF_POINTS], inverse[CDF_POINTS];
     galaxy_cdf_build(radii, cumulative, inverse, glx->rad_core, glx->rad_galaxy);
