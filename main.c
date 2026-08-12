@@ -35,6 +35,11 @@ typedef BOOL(wglChoosePixelFormatARB_func)(
 global wglCreateContextAttribsARB_func *wglCreateContextAttribsARB = NULL;
 global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
 
+#define KEY_DOWN(win, key) (win->keys[key])
+#define KEY_UP(win, key) (!win->keys[key])
+#define KEY_JUST_DOWN(win, key) (win->keys[key] && !win->prev_keys[key])
+#define KEY_JUST_UP(win, key) (!win->keys[key] && win->prev_keys[key])
+
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
@@ -65,10 +70,14 @@ typedef struct {
 } vertex;
 
 typedef struct {
-    HINSTANCE mod_handle;
-    HWND      window;
-    HDC       device_ctx;
+    b8        keys[256];
+    b8        prev_keys[256];
+    b32       should_close;
+    u32       width, height;
     HGLRC     gl_ctx;
+    HDC       device_ctx;
+    HWND      window;
+    HINSTANCE mod_handle;
 } window;
 
 typedef struct {
@@ -91,16 +100,17 @@ typedef struct {
 
 typedef struct {
     u32           seed; 
-    b32           is_running;
     vertex        *vertices;
     window        *window;
     renderer      *renderer;
     galaxy_params *galaxy_params;
 } app;
 
+internal void app_update(app *state);
 internal char *platform_read_file(const char *path);
 internal window window_create(void);
-internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
+internal void window_process_events(window *win);
+internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 internal renderer renderer_create(i32 n);
 internal void renderer_resize(renderer *render, i32 n);
 internal void renderer_draw(const renderer *render, i32 n);
@@ -149,7 +159,6 @@ int main(void) {
     renderer render = renderer_create(capacity);
     app state = {
         .seed = seed,
-        .is_running = true,
         .vertices = vertices,
         .window = &win,
         .renderer = &render,
@@ -162,16 +171,13 @@ int main(void) {
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
-    SetWindowLongPtrW(win.window, GWLP_USERDATA, (LONG_PTR)&state);
+    SetWindowLongPtrW(win.window, GWLP_USERDATA, (LONG_PTR)&win);
     LARGE_INTEGER start_time, end_time, tps;
     QueryPerformanceFrequency(&tps);
     QueryPerformanceCounter(&start_time);
-    while (state.is_running) {
-        MSG msg = {0};
-        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
+    while (!win.should_close) {
+        window_process_events(&win);
+        app_update(&state);
 
         QueryPerformanceCounter(&end_time);
         u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
@@ -185,6 +191,88 @@ int main(void) {
     }
 
     return 0;
+}
+
+internal void app_update(app *state) {
+    b32 key_hit = false;
+    if (KEY_DOWN(state->window, 'Q')) { state->galaxy_params->angular_offset += 0.00005f;   key_hit = true; }
+    if (KEY_DOWN(state->window, 'A')) { state->galaxy_params->angular_offset -= 0.00005f;   key_hit = true; }
+    if (KEY_DOWN(state->window, 'W')) { state->galaxy_params->ex_inner       += 0.02f;      key_hit = true; }
+    if (KEY_DOWN(state->window, 'S')) { state->galaxy_params->ex_inner       -= 0.02f;      key_hit = true; }
+    if (KEY_DOWN(state->window, 'E')) { state->galaxy_params->ex_outer       += 0.02f;      key_hit = true; }
+    if (KEY_DOWN(state->window, 'D')) { state->galaxy_params->ex_outer       -= 0.02f;      key_hit = true; }
+    if (KEY_DOWN(state->window, 'R')) { state->galaxy_params->time_scale     += 1000000.0f; key_hit = true; }
+    if (KEY_DOWN(state->window, 'F')) { state->galaxy_params->time_scale     -= 1000000.0f; key_hit = true; }
+    if (KEY_DOWN(state->window, 'U')) { state->galaxy_params->rad_core       += 100.0f;     key_hit = true; }
+    if (KEY_DOWN(state->window, 'J')) { state->galaxy_params->rad_core       -= 100.0f;     key_hit = true; }
+    if (KEY_DOWN(state->window, 'I')) { state->galaxy_params->rad_galaxy     += 100.0f;     key_hit = true; }
+    if (KEY_DOWN(state->window, 'K')) { state->galaxy_params->rad_galaxy     -= 100.0f;     key_hit = true; }
+
+    b32 should_update = false;
+    if (KEY_DOWN(state->window, 'T')) {
+        state->galaxy_params->num_stars += 1000;
+        key_hit = true;
+        should_update = true;
+    }
+    if (KEY_DOWN(state->window, 'G')) {
+        state->galaxy_params->num_stars -= 1000;
+        if (state->galaxy_params->num_stars < 0)
+            state->galaxy_params->num_stars = 0;
+        key_hit = true;
+        should_update = true;
+    }
+    if (KEY_DOWN(state->window, 'Y')) {
+        state->galaxy_params->num_dust  += 1000;
+        key_hit = true;
+        should_update = true;
+    }
+    if (KEY_DOWN(state->window, 'H')) {
+        state->galaxy_params->num_dust  -= 1000;
+        if (state->galaxy_params->num_dust < 0)
+            state->galaxy_params->num_dust = 0;
+        key_hit = true;
+        should_update = true;
+    }
+
+    if (should_update) {
+        i32 capacity = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
+        state->vertices = (vertex*)realloc(state->vertices, capacity * sizeof(vertex));
+        renderer_resize(state->renderer, capacity);
+        galaxy_init(state->galaxy_params, state->vertices, state->seed);
+        renderer_upload(state->renderer, state->vertices, state->galaxy_params->num_particles);
+    }
+
+    if (key_hit) {
+        printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d rad_core %.0f rad_galaxy %.0f\n",
+            state->galaxy_params->angular_offset, state->galaxy_params->ex_inner,  state->galaxy_params->ex_outer,
+            state->galaxy_params->time_scale,     state->galaxy_params->num_stars, state->galaxy_params->num_dust,
+            state->galaxy_params->rad_core,       state->galaxy_params->rad_galaxy);
+    }
+}
+
+internal char *platform_read_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) return NULL;
+
+    fseek(f, 0L, SEEK_END);
+    i32 size = (i32)ftell(f);
+    rewind(f);
+
+    char *buf = (char *)malloc(size + 1);
+    if (buf == NULL) {
+        fclose(f);
+        return NULL;
+    }
+
+    i32 read = (i32)fread(buf, 1, size, f);
+    fclose(f);
+    if (read != size) {
+        free(buf);
+        return NULL; 
+    }
+
+    buf[size] = '\0';
+    return buf;
 }
 
 internal window window_create(void) {
@@ -304,109 +392,44 @@ internal window window_create(void) {
     return win;
 }
 
-internal char *platform_read_file(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (f == NULL) return NULL;
+internal void window_process_events(window *win) {
+    memcpy(win->prev_keys, win->keys, sizeof(win->keys));
 
-    fseek(f, 0L, SEEK_END);
-    i32 size = (i32)ftell(f);
-    rewind(f);
-
-    char *buf = (char *)malloc(size + 1);
-    if (buf == NULL) {
-        fclose(f);
-        return NULL;
+    MSG msg = {0};
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
     }
-
-    i32 read = (i32)fread(buf, 1, size, f);
-    fclose(f);
-
-    if (read != size) {
-        free(buf);
-        return NULL; 
-    }
-
-    buf[size] = '\0';
-    return buf;
 }
 
-internal LRESULT window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
-    app *state = (app*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    if (!state) return DefWindowProcW(hwnd, umsg, wparam, lparam);
+internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam) {
+    window *win = (window*)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (!win) return DefWindowProcW(hwnd, umsg, wparam, lparam);
 
     switch (umsg) {
         case WM_KEYDOWN: {
-            b32 update_count = false;
-            switch (wparam) {
-                case 'Q': state->galaxy_params->angular_offset += 0.00005f;    break;
-                case 'A': state->galaxy_params->angular_offset -= 0.00005f;    break;
-                case 'W': state->galaxy_params->ex_inner       += 0.02f;       break;
-                case 'S': state->galaxy_params->ex_inner       -= 0.02f;       break;
-                case 'E': state->galaxy_params->ex_outer       += 0.02f;       break;
-                case 'D': state->galaxy_params->ex_outer       -= 0.02f;       break;
-                case 'R': state->galaxy_params->time_scale     += 1000000.0f;  break;
-                case 'F': state->galaxy_params->time_scale     -= 1000000.0f;  break;
-                case 'T': { 
-                    state->galaxy_params->num_stars += 1000; 
-                    update_count = true;
-                } break;
-                case 'G': { 
-                    state->galaxy_params->num_stars -= 1000; 
-                    if (state->galaxy_params->num_stars < 0) 
-                        state->galaxy_params->num_stars = 0;
-                    update_count = true;
-                } break;
-                case 'Y': { 
-                    state->galaxy_params->num_dust += 1000; 
-                    update_count = true;
-                } break;
-                case 'H': { 
-                    state->galaxy_params->num_dust -= 1000; 
-                    if (state->galaxy_params->num_dust < 0) 
-                        state->galaxy_params->num_dust = 0;
-                    update_count = true;
-                } break;
-                case 'U': state->galaxy_params->rad_core        += 100.0f;      break;
-                case 'J': state->galaxy_params->rad_core        -= 100.0f;      break;
-                case 'I': state->galaxy_params->rad_galaxy      += 100.0f;      break;
-                case 'K': state->galaxy_params->rad_galaxy      -= 100.0f;      break;
-
-                default: return DefWindowProcW(hwnd, umsg, wparam, lparam);
-            }
-
-            if (update_count) {
-                i32 capacity = state->galaxy_params->num_stars + state->galaxy_params->num_dust * 2;
-                state->vertices = (vertex*)realloc(state->vertices, capacity * sizeof(vertex));
-                renderer_resize(state->renderer, capacity);
-            }
-            
-            galaxy_init(state->galaxy_params, state->vertices, state->seed);
-            renderer_upload(state->renderer, state->vertices, state->galaxy_params->num_particles);
-            printf("offset: %f ex_inner: %f ex_outer: %f time_scale %.0f num_stars %d num_dust %d rad_core %.0f rad_galaxy %.0f\n",
-                state->galaxy_params->angular_offset,
-                state->galaxy_params->ex_inner, 
-                state->galaxy_params->ex_outer,
-                state->galaxy_params->time_scale,
-                state->galaxy_params->num_stars,
-                state->galaxy_params->num_dust,
-                state->galaxy_params->rad_core,
-                state->galaxy_params->rad_galaxy);
+            if (wparam < sizeof(win->keys) / sizeof(win->keys[0]))
+                win->keys[wparam] = true;
         } break;
+
+        case WM_KEYUP: {
+            if (wparam < sizeof(win->keys) / sizeof(win->keys[0]))
+                win->keys[wparam] = false;
+        } break;
+
         case WM_SIZE: {
-            u32 width = LOWORD(lparam);
-            u32 height = HIWORD(lparam);
-            glViewport(0, 0, width, height);
-
-            renderer_draw(state->renderer, state->galaxy_params->num_particles);
-
-            SwapBuffers(state->window->device_ctx);
+            win->width  = (u32)LOWORD(lparam);
+            win->height = (u32)HIWORD(lparam);
         } break;
+
         case WM_CLOSE: {
-            state->is_running = false;
+            win->should_close = true;
         } break;
+
+        default: return DefWindowProcW(hwnd, umsg, wparam, lparam); break;
     }
 
-    return DefWindowProcW(hwnd, umsg, wparam, lparam);
+    return 0;
 }
 
 internal renderer renderer_create(i32 n) {
