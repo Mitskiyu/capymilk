@@ -107,7 +107,8 @@ typedef struct {
 } app;
 
 internal void app_update(app *state);
-internal char *platform_read_file(const char *path);
+internal char *platform_file_read(const char *path);
+internal u64 platform_time_usec(void);
 internal window window_create(void);
 internal void window_process_events(window *win);
 internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
@@ -133,9 +134,14 @@ internal f32 galaxy_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
 internal void galaxy_init(galaxy *glx, vertex *vertices, u32 seed);
 
 global vec3 color_table[COLOR_TABLE_SIZE];
+global u64  perf_freq = 1;
 
 int main(void) {
     u32 seed = (u32)time(NULL);
+    LARGE_INTEGER freq;
+    if (QueryPerformanceFrequency(&freq)) {
+        perf_freq = (u64)freq.QuadPart;
+    }
 
     window win = window_create();
     if (!win.window) return 1;
@@ -172,16 +178,15 @@ int main(void) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
     SetWindowLongPtrW(win.window, GWLP_USERDATA, (LONG_PTR)&win);
-    LARGE_INTEGER start_time, end_time, tps;
-    QueryPerformanceFrequency(&tps);
-    QueryPerformanceCounter(&start_time);
+
+    u64 start_us = platform_time_usec();
+
     while (!win.should_close) {
         window_process_events(&win);
         app_update(&state);
 
-        QueryPerformanceCounter(&end_time);
-        u64 elapsed_us = ((end_time.QuadPart - start_time.QuadPart) * 1000000) / tps.QuadPart;
-        f32 elapsed_years = (elapsed_us / 1000000.0f) * glx.time_scale;
+        u64 now_us = platform_time_usec();
+        f32 elapsed_years = ((now_us - start_us) / 1000000.0f) * glx.time_scale;
 
         renderer_update(&render, &glx, elapsed_years);
         renderer_upload(&render, state.vertices, glx.num_particles);
@@ -250,7 +255,7 @@ internal void app_update(app *state) {
     }
 }
 
-internal char *platform_read_file(const char *path) {
+internal char *platform_file_read(const char *path) {
     FILE *f = fopen(path, "rb");
     if (f == NULL) return NULL;
 
@@ -273,6 +278,12 @@ internal char *platform_read_file(const char *path) {
 
     buf[size] = '\0';
     return buf;
+}
+
+internal u64 platform_time_usec(void) {
+    LARGE_INTEGER ticks = {0};
+    if (!QueryPerformanceCounter(&ticks)) return 0;
+    return (u64)ticks.QuadPart * 1000000 / perf_freq;
 }
 
 internal window window_create(void) {
@@ -440,13 +451,13 @@ internal renderer renderer_create(i32 n) {
         i32 ok = 0;
         char info_log[512];
 
-        char *vert_source = platform_read_file("galaxy.vert");
+        char *vert_source = platform_file_read("galaxy.vert");
         if (vert_source == NULL) {
             printf("failed to load galaxy.vert\n");
             return render;
         }
 
-        char *frag_source = platform_read_file("galaxy.frag");
+        char *frag_source = platform_file_read("galaxy.frag");
         if (frag_source == NULL) {
             printf("failed to load galaxy.frag\n");
             free(vert_source);
