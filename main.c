@@ -109,7 +109,7 @@ typedef struct {
 internal void app_update(app *state);
 internal char *platform_file_read(const char *path);
 internal u64 platform_time_usec(void);
-internal window window_create(void);
+internal window window_create(u32 width, u32 height, wchar_t *name);
 internal void window_process_events(window *win);
 internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
 internal renderer renderer_create(i32 n);
@@ -143,7 +143,7 @@ int main(void) {
         perf_freq = (u64)freq.QuadPart;
     }
 
-    window win = window_create();
+    window win = window_create(1024, 1500, L"Capymilk");
     if (!win.window) return 1;
 
     galaxy glx = {
@@ -286,7 +286,7 @@ internal u64 platform_time_usec(void) {
     return (u64)ticks.QuadPart * 1000000 / perf_freq;
 }
 
-internal window window_create(void) {
+internal window window_create(u32 width, u32 height, wchar_t *name) {
     window win = {0};
 
     HINSTANCE mod_handle = GetModuleHandle(NULL);
@@ -372,8 +372,8 @@ internal window window_create(void) {
     if (!RegisterClassW(&wnd_class)) return win;  // log
 
     HWND hwnd = CreateWindowExW(
-        0, CLASS_NAME, L"Capymilk", WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
-        CW_USEDEFAULT, 1024, 1024, NULL, NULL, mod_handle,
+        0, CLASS_NAME, name, WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
+        CW_USEDEFAULT, width, height, NULL, NULL, mod_handle,
         NULL
     );
     if (!hwnd) return win;  // log
