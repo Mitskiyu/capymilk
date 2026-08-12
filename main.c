@@ -116,7 +116,7 @@ internal renderer renderer_create(i32 n);
 internal void renderer_resize(renderer *render, i32 n);
 internal void renderer_draw(const renderer *render, i32 n);
 internal void renderer_upload(renderer *render, vertex *vertices, i32 n);
-internal void renderer_update(renderer *render, galaxy *glx, f32 elapsed_years);
+internal void renderer_update(renderer *render, galaxy *glx, f32 elapsed_years, f32 aspect_ratio);
 internal f32 galaxy_ex(const galaxy *glx, f32 radius);
 internal f32 galaxy_brightness(f32 rad_core, f32 rad_galaxy, f32 radius);
 internal void galaxy_cdf_build(f32 *radii, f32 *cumulative, f32 *inverse, f32 rad_core, f32 rad_galaxy);
@@ -143,7 +143,7 @@ int main(void) {
         perf_freq = (u64)freq.QuadPart;
     }
 
-    window win = window_create(1024, 1500, L"Capymilk");
+    window win = window_create(1024, 1024, L"Capymilk");
     if (!win.window) return 1;
 
     galaxy glx = {
@@ -183,12 +183,14 @@ int main(void) {
 
     while (!win.should_close) {
         window_process_events(&win);
+        glViewport(0,0, win.width, win.height);
         app_update(&state);
 
         u64 now_us = platform_time_usec();
         f32 elapsed_years = ((now_us - start_us) / 1000000.0f) * glx.time_scale;
 
-        renderer_update(&render, &glx, elapsed_years);
+        f32 aspect_ratio = (f32)win.width / win.height;
+        renderer_update(&render, &glx, elapsed_years, aspect_ratio);
         renderer_upload(&render, state.vertices, glx.num_particles);
         renderer_draw(&render, glx.num_particles);
 
@@ -394,7 +396,9 @@ internal window window_create(u32 width, u32 height, wchar_t *name) {
     if (!gl_ctx) return win;  // log
     b32 ok = wglMakeCurrent(dc, gl_ctx);
     if (!ok) return win;  // log
-    
+
+    win.width = width;
+    win.height = height;
     win.mod_handle = mod_handle;
     win.window = hwnd;
     win.device_ctx = dc;
@@ -577,8 +581,9 @@ internal void renderer_upload(renderer *render, vertex *vertices, i32 n) {
     glNamedBufferSubData(render->vbo, 0, sizeof(vertex) * n, vertices);
 }
 
-internal void renderer_update(renderer *render, galaxy *glx, f32 elapsed_years) {
+internal void renderer_update(renderer *render, galaxy *glx, f32 elapsed_years, f32 aspect_ratio) {
     GLuint shader = render->shader_program;
+    glProgramUniform1f(shader, glGetUniformLocation(shader, "u_aspect_ratio"),   aspect_ratio);
     glProgramUniform1f(shader, glGetUniformLocation(shader, "u_elapsed_years"),  elapsed_years);
     glProgramUniform1f(shader, glGetUniformLocation(shader, "u_ex_inner"),       glx->ex_inner);
     glProgramUniform1f(shader, glGetUniformLocation(shader, "u_ex_outer"),       glx->ex_outer);

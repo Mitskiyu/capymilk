@@ -1,5 +1,6 @@
 #version 450
 
+uniform float u_aspect_ratio;
 uniform float u_elapsed_years;
 uniform float u_ex_inner;
 uniform float u_ex_outer;
@@ -44,7 +45,7 @@ void main()
     float sin_r = sin(tilt);
     vec3 pos = vec3(0.0);
 
-    pos.x = (x * cos_r - y * sin_r) * scale;
+    pos.x = ((x * cos_r - y * sin_r) * scale) / u_aspect_ratio;
     pos.y = (x * sin_r + y * cos_r) * scale;
 
     gl_Position = vec4(pos, 1.0);
