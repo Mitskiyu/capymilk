@@ -37,7 +37,7 @@ void main()
 {
     float scale = 0.5 / u_rad_galaxy;
 
-    float theta = a_theta + (a_ang_speed * u_elapsed_years);
+    float theta = a_theta + a_ang_speed * u_elapsed_years;
     float tilt = a_radius * u_angular_offset;
     float x = cos(theta) * a_radius;
     float y = sin(theta) * a_radius * eccentricity(u_rad_core, u_rad_galaxy, u_ex_inner, u_ex_outer, a_radius);

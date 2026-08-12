@@ -259,11 +259,18 @@ internal void app_update(app *state) {
 
 internal void app_draw(void *ctx) {
     app *state = (app*)ctx;
+    local_persist u64 last_frame_us = 0;
+    local_persist f32 elapsed_years = 0.0f;
 
     u64 now_us = platform_time_usec();
-    f32 elapsed_years = ((now_us - state->start_us) / 1000000.0f) * state->galaxy->time_scale;
-    f32 aspect_ratio = (f32)state->window->width / state->window->height;
+    if (last_frame_us == 0)
+        last_frame_us = now_us;
 
+    f32 dt_sec = (now_us - last_frame_us) / 1000000.0f;
+    elapsed_years += dt_sec * state->galaxy->time_scale;
+    last_frame_us = now_us;
+
+    f32 aspect_ratio = (f32)state->window->width / state->window->height;
     renderer_update(state->renderer, state->galaxy, elapsed_years, aspect_ratio);
     glViewport(0, 0, state->window->width, state->window->height);
     renderer_draw(state->renderer, state->galaxy->num_particles);
