@@ -32,8 +32,13 @@ typedef BOOL(wglChoosePixelFormatARB_func)(
     UINT nMaxFormats, int *piFormats, UINT *nNumFormats
 );
 
+typedef void (*draw_fn)(void *ctx);
+
 global wglCreateContextAttribsARB_func *wglCreateContextAttribsARB = NULL;
 global wglChoosePixelFormatARB_func    *wglChoosePixelFormatARB    = NULL;
+
+global draw_fn   draw_callback = NULL;
+global void      *draw_ctx     = NULL;
 
 #define KEY_DOWN(win, key) (win->keys[key])
 #define KEY_UP(win, key) (!win->keys[key])
@@ -100,6 +105,7 @@ typedef struct {
 
 typedef struct {
     u32      seed; 
+    u64      start_us;
     vertex   *vertices;
     window   *window;
     renderer *renderer;
@@ -107,6 +113,7 @@ typedef struct {
 } app;
 
 internal void app_update(app *state);
+internal void app_draw(void *ctx);
 internal char *platform_file_read(const char *path);
 internal u64 platform_time_usec(void);
 internal window window_create(u32 width, u32 height, wchar_t *name);
@@ -163,13 +170,19 @@ int main(void) {
     if (!vertices) return 1;
 
     renderer render = renderer_create(capacity);
+
+    u64 start_us = platform_time_usec();
     app state = {
         .seed = seed,
+        .start_us = start_us,
         .vertices = vertices,
         .window = &win,
         .renderer = &render,
         .galaxy = &glx,
     };
+
+    draw_callback = app_draw;
+    draw_ctx = &state;
 
     galaxy_ct_build();
     galaxy_init(&glx, vertices, seed);
@@ -178,23 +191,10 @@ int main(void) {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
     SetWindowLongPtrW(win.window, GWLP_USERDATA, (LONG_PTR)&win);
-
-    u64 start_us = platform_time_usec();
-
     while (!win.should_close) {
         window_process_events(&win);
-        glViewport(0,0, win.width, win.height);
         app_update(&state);
-
-        u64 now_us = platform_time_usec();
-        f32 elapsed_years = ((now_us - start_us) / 1000000.0f) * glx.time_scale;
-
-        f32 aspect_ratio = (f32)win.width / win.height;
-        renderer_update(&render, &glx, elapsed_years, aspect_ratio);
-        renderer_upload(&render, state.vertices, glx.num_particles);
-        renderer_draw(&render, glx.num_particles);
-
-        SwapBuffers(win.device_ctx);
+        app_draw(&state);
     }
 
     return 0;
@@ -255,6 +255,19 @@ internal void app_update(app *state) {
             state->galaxy->time_scale,     state->galaxy->num_stars, state->galaxy->num_dust,
             state->galaxy->rad_core,       state->galaxy->rad_galaxy);
     }
+}
+
+internal void app_draw(void *ctx) {
+    app *state = (app*)ctx;
+
+    u64 now_us = platform_time_usec();
+    f32 elapsed_years = ((now_us - state->start_us) / 1000000.0f) * state->galaxy->time_scale;
+    f32 aspect_ratio = (f32)state->window->width / state->window->height;
+
+    renderer_update(state->renderer, state->galaxy, elapsed_years, aspect_ratio);
+    glViewport(0, 0, state->window->width, state->window->height);
+    renderer_draw(state->renderer, state->galaxy->num_particles);
+    SwapBuffers(state->window->device_ctx);
 }
 
 internal char *platform_file_read(const char *path) {
@@ -435,6 +448,19 @@ internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
         case WM_SIZE: {
             win->width  = (u32)LOWORD(lparam);
             win->height = (u32)HIWORD(lparam);
+        } break;
+
+        case WM_ENTERSIZEMOVE: {
+            SetTimer(hwnd, 1, 10, NULL);
+        } break;
+
+        case WM_EXITSIZEMOVE: {
+            KillTimer(hwnd, 1);
+        } break;
+
+        case WM_TIMER: {
+            if (draw_callback)
+                draw_callback(draw_ctx);
         } break;
 
         case WM_CLOSE: {
