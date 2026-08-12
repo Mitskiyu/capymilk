@@ -455,6 +455,8 @@ internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
         case WM_SIZE: {
             win->width  = (u32)LOWORD(lparam);
             win->height = (u32)HIWORD(lparam);
+            if (draw_callback)
+                draw_callback(draw_ctx);
         } break;
 
         case WM_ENTERSIZEMOVE: {
