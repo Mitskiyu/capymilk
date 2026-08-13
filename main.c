@@ -4,6 +4,7 @@
 
 #define UNICODE
 #include <windows.h>
+#include <windowsx.h>
 #include <gl/gl.h>
 
 #include "base_core.h"
@@ -45,6 +46,11 @@ global void      *draw_ctx     = NULL;
 #define KEY_JUST_DOWN(win, key) (win->keys[key] && !win->prev_keys[key])
 #define KEY_JUST_UP(win, key) (!win->keys[key] && win->prev_keys[key])
 
+#define MOUSE_DOWN(win, mb) (win->mouse_buttons[mb])
+#define MOUSE_UP(win, mb) (!win->mouse_buttons[mb])
+#define MOUSE_JUST_DOWN(win, mb) (win->mouse_buttons[mb] && !win->prev_mouse_buttons[mb])
+#define MOUSE_JUST_UP(win, mb) (!win->mouse_buttons[mb] && win->prev_mouse_buttons[mb])
+
 #define DUMMY_CLASS_NAME L"dummy_class_name"
 #define CLASS_NAME       L"class_name"
 
@@ -77,6 +83,9 @@ typedef struct {
 typedef struct {
     b8        keys[256];
     b8        prev_keys[256];
+    b8        mouse_buttons[5];
+    b8        prev_mouse_buttons[5];
+    f32       cur_x, cur_y;
     b32       should_close;
     u32       width, height;
     HGLRC     gl_ctx;
@@ -429,6 +438,7 @@ internal window window_create(u32 width, u32 height, wchar_t *name) {
 
 internal void window_process_events(window *win) {
     memcpy(win->prev_keys, win->keys, sizeof(win->keys));
+    memcpy(win->prev_mouse_buttons, win->mouse_buttons, sizeof(win->mouse_buttons));
 
     MSG msg = {0};
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -451,6 +461,24 @@ internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
             if (wparam < sizeof(win->keys) / sizeof(win->keys[0]))
                 win->keys[wparam] = false;
         } break;
+
+        case WM_MOUSEMOVE: {
+            win->cur_x = (f32)GET_X_LPARAM(lparam);
+            win->cur_y = (f32)GET_Y_LPARAM(lparam);
+        } break;
+
+        case WM_LBUTTONDOWN: { 
+            win->mouse_buttons[0] = true;  
+            win->cur_x = (f32)GET_X_LPARAM(lparam); win->cur_y = (f32)GET_Y_LPARAM(lparam); } break;
+        case WM_LBUTTONUP: { 
+            win->mouse_buttons[0] = false;  
+            win->cur_x = (f32)GET_X_LPARAM(lparam); win->cur_y = (f32)GET_Y_LPARAM(lparam); } break;
+        case WM_RBUTTONDOWN: {
+            win->mouse_buttons[1] = true;
+            win->cur_x = (f32)GET_X_LPARAM(lparam); win->cur_y = (f32)GET_Y_LPARAM(lparam); } break;
+        case WM_RBUTTONUP: {
+            win->mouse_buttons[1] = false;
+            win->cur_x = (f32)GET_X_LPARAM(lparam); win->cur_y = (f32)GET_Y_LPARAM(lparam); } break;
 
         case WM_SIZE: {
             win->width  = (u32)LOWORD(lparam);
