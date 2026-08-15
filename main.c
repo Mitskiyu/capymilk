@@ -72,6 +72,11 @@ global void      *draw_ctx     = NULL;
 #define SEC_PER_YEAR  (365.25f * 86400.0f)
 
 typedef struct {
+    vec2 pos;
+    vec3 color;
+} ui_vertex;
+
+typedef struct {
     vec3 color;
     f32  radius;
     f32  theta;
@@ -128,6 +133,7 @@ internal u64 platform_time_usec(void);
 internal window window_create(u32 width, u32 height, wchar_t *name);
 internal void window_process_events(window *win);
 internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
+internal renderer ui_renderer_create();
 internal renderer galaxy_renderer_create(i32 n);
 internal void galaxy_renderer_resize(renderer *render, i32 n);
 internal void galaxy_renderer_draw(const renderer *render, i32 n);
@@ -508,6 +514,116 @@ internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARA
     }
 
     return 0;
+}
+
+internal renderer ui_renderer_create(void) {
+    renderer render = {0};
+
+    GLuint shader_program = 0;
+    {
+        i32 ok = 0;
+        char info_log[512];
+
+        char *vert_source = platform_file_read("ui.vert");
+        if (vert_source == NULL) {
+            printf("failed to load ui.vert\n");
+            return render;
+        }
+        
+        char *frag_source = platform_file_read("ui.frag");
+        if (frag_source == NULL) {
+            printf("failed to load ui.vert\n");
+            free(vert_source);
+            return render;
+        }
+
+        GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertex_shader, 1, (const char**)&vert_source, NULL);
+        glCompileShader(vertex_shader);
+        glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            glGetShaderInfoLog(vertex_shader, 512, NULL, info_log);
+            printf("vertex shader failed to compile: %s\n", info_log);
+            free(vert_source);
+            free(frag_source);
+            glDeleteShader(vertex_shader);
+            return render;
+        }
+
+        GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment_shader, 1, (const char**)&frag_source, NULL);
+        glCompileShader(fragment_shader);
+        glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            glGetShaderInfoLog(fragment_shader, 512, NULL, info_log);
+            printf("fragment shader failed to compile: %s\n", info_log);
+            free(vert_source);
+            free(frag_source);
+            glDeleteShader(vertex_shader);
+            glDeleteShader(fragment_shader);
+            return render;
+        }
+
+        shader_program = glCreateProgram();
+        glAttachShader(shader_program, vertex_shader);
+        glAttachShader(shader_program, fragment_shader);
+        glLinkProgram(shader_program);
+        glGetProgramiv(shader_program, GL_LINK_STATUS, &ok);
+        if (!ok) {
+            glGetProgramInfoLog(shader_program, 512, NULL, info_log);
+            printf("shader program failed to link: %s\n", info_log);
+            free(vert_source);
+            free(frag_source);
+            glDeleteShader(vertex_shader);
+            glDeleteShader(fragment_shader);
+            return render;
+        }
+
+        free(vert_source);
+        free(frag_source);
+        glDeleteShader(vertex_shader);
+        glDeleteShader(fragment_shader);
+    }
+
+    GLuint vbo = 0, vao = 0, ebo = 0;
+    {
+        ui_vertex quad[4] = {
+            { .pos = { -1.0f,  1.0f } }, // TL
+            { .pos = {  1.0f,  1.0f } }, // TR
+            { .pos = { -1.0f, -1.0f } }, // BL
+            { .pos = {  1.0f, -1.0f } }, // BR
+        };
+        u32 indices[6] = {
+            0, 1, 2,   // TL, TR, BL
+            2, 1, 3    // BL, TR, BR
+        };
+
+        glCreateBuffers(1, &vbo);
+        glCreateBuffers(1, &ebo);
+        glCreateVertexArrays(1, &vao);
+
+        glNamedBufferStorage(vbo, sizeof(ui_vertex) * 4, quad, 0);
+        glNamedBufferStorage(ebo, sizeof(indices), indices, 0);
+        glVertexArrayElementBuffer(vao, ebo);
+
+        glVertexArrayVertexBuffer(vao, 0, vbo, 0, sizeof(ui_vertex));
+
+        // pos
+        glVertexArrayAttribBinding(vao, 0, 0);
+        glVertexArrayAttribFormat(vao, 0, 2, GL_FLOAT, GL_FALSE, 0);
+        glEnableVertexArrayAttrib(vao, 0);
+
+        // color
+        glVertexArrayAttribBinding(vao, 1, 0);
+        glVertexArrayAttribFormat(vao, 1, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(f32));
+        glEnableVertexArrayAttrib(vao, 1);
+    }
+
+    render.shader_program = shader_program;
+    render.vao = vao;
+    render.vbo = vbo;
+
+    return render;
 }
 
 internal renderer galaxy_renderer_create(i32 n) {
