@@ -23,4 +23,6 @@ X(void,   NamedBufferSubData,       (GLuint buffer, GLintptr offset, GLsizeiptr 
 X(void,   DeleteBuffers,            (GLsizei n, const GLuint *buffers))
 X(GLint,  GetUniformLocation,       (GLuint program, const GLchar *name))
 X(void,   ProgramUniform1f,         (GLuint program, GLint location, GLfloat v0))
+X(void,   ProgramUniform2f,         (GLuint program, GLint location, GLfloat v0, GLfloat v1))
+X(void,   ProgramUniform3f,         (GLuint program, GLint location, GLfloat v0, GLfloat v1, GLfloat v2))
 X(void,   VertexArrayElementBuffer, (GLuint vaobj, GLuint buffer))

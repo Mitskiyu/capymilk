@@ -121,7 +121,8 @@ typedef struct {
     u32             seed; 
     u64             start_us;
     window          *window;
-    renderer        *renderer;
+    renderer        *ui_render;
+    renderer        *glx_render;
     galaxy          *galaxy;
     galaxy_vertex   *vertices;
 } app;
@@ -133,7 +134,8 @@ internal u64 platform_time_usec(void);
 internal window window_create(u32 width, u32 height, wchar_t *name);
 internal void window_process_events(window *win);
 internal LRESULT CALLBACK window_proc(HWND hwnd, UINT umsg, WPARAM wparam, LPARAM lparam);
-internal renderer ui_renderer_create();
+internal renderer ui_renderer_create(void);
+internal void ui_renderer_draw(const renderer *render, f32 x, f32 y, f32 w, f32 h, vec3 color);
 internal renderer galaxy_renderer_create(i32 n);
 internal void galaxy_renderer_resize(renderer *render, i32 n);
 internal void galaxy_renderer_draw(const renderer *render, i32 n);
@@ -184,7 +186,8 @@ int main(void) {
     galaxy_vertex *vertices = (galaxy_vertex *)malloc(capacity * sizeof(galaxy_vertex));
     if (!vertices) return 1;
 
-    renderer render = galaxy_renderer_create(capacity);
+    renderer ui_render  = ui_renderer_create();
+    renderer glx_render = galaxy_renderer_create(capacity);
 
     u64 start_us = platform_time_usec();
     app state = {
@@ -192,7 +195,8 @@ int main(void) {
         .start_us = start_us,
         .vertices = vertices,
         .window = &win,
-        .renderer = &render,
+        .ui_render = &ui_render,
+        .glx_render = &glx_render,
         .galaxy = &glx,
     };
 
@@ -201,7 +205,7 @@ int main(void) {
 
     galaxy_ct_build();
     galaxy_init(&glx, vertices, seed);
-    galaxy_renderer_upload(&render, vertices, glx.num_particles);
+    galaxy_renderer_upload(&glx_render, vertices, glx.num_particles);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0);
 
@@ -259,9 +263,9 @@ internal void app_update(app *state) {
     if (should_update) {
         i32 capacity = state->galaxy->num_stars + state->galaxy->num_dust * 2;
         state->vertices = (galaxy_vertex*)realloc(state->vertices, capacity * sizeof(galaxy_vertex));
-        galaxy_renderer_resize(state->renderer, capacity);
+        galaxy_renderer_resize(state->glx_render, capacity);
         galaxy_init(state->galaxy, state->vertices, state->seed);
-        galaxy_renderer_upload(state->renderer, state->vertices, state->galaxy->num_particles);
+        galaxy_renderer_upload(state->glx_render, state->vertices, state->galaxy->num_particles);
     }
 
     if (key_hit) {
@@ -286,9 +290,14 @@ internal void app_draw(void *ctx) {
     last_frame_us = now_us;
 
     f32 aspect_ratio = (f32)state->window->width / state->window->height;
-    galaxy_renderer_update(state->renderer, state->galaxy, elapsed_years, aspect_ratio);
+    galaxy_renderer_update(state->glx_render, state->galaxy, elapsed_years, aspect_ratio);
+
+    glClear(GL_COLOR_BUFFER_BIT);
     glViewport(0, 0, state->window->width, state->window->height);
-    galaxy_renderer_draw(state->renderer, state->galaxy->num_particles);
+
+    galaxy_renderer_draw(state->glx_render, state->galaxy->num_particles);
+    ui_renderer_draw(state->ui_render, 0.0f, 0.0f, 0.5f, 0.5f, (vec3){1,0,0});
+
     SwapBuffers(state->window->device_ctx);
 }
 
@@ -626,6 +635,17 @@ internal renderer ui_renderer_create(void) {
     return render;
 }
 
+internal void ui_renderer_draw(const renderer *render, f32 x, f32 y, f32 w, f32 h, vec3 color) {
+    glBindVertexArray(render->vao);
+    glUseProgram(render->shader_program);
+
+    glProgramUniform2f(render->shader_program, glGetUniformLocation(render->shader_program, "u_pos"),   x, y);
+    glProgramUniform2f(render->shader_program, glGetUniformLocation(render->shader_program, "u_size"),  w, h);
+    glProgramUniform3f(render->shader_program, glGetUniformLocation(render->shader_program, "u_color"), color.x, color.y, color.z);
+
+    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+}
+
 internal renderer galaxy_renderer_create(i32 n) {
     renderer render = {0};
 
@@ -750,7 +770,6 @@ internal void galaxy_renderer_resize(renderer *render, i32 n) {
 }
 
 internal void galaxy_renderer_draw(const renderer *render, i32 n) {
-    glClear(GL_COLOR_BUFFER_BIT);
     glBindVertexArray(render->vao);
     glUseProgram(render->shader_program);
     glDrawArrays(GL_POINTS, 0, n);
