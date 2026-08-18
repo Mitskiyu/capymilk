@@ -1,3 +1,6 @@
+#ifndef OPENGL_DEFS_H
+#define OPENGL_DEFS_H
+
 // https://registry.khronos.org/OpenGL/api/GL/glcorearb.h
 typedef unsigned int  GLenum;
 typedef unsigned int  GLuint;
@@ -31,5 +34,7 @@ typedef intptr_t      GLintptr;
 #define X(ret, name, args) \
     typedef ret OPENGL_CALLSTYLE gl_##name##_func args; \
     static gl_##name##_func* gl##name;
-#include "opengl_xlist.h"
+#   include "opengl_xlist.h"
 #undef X
+
+#endif

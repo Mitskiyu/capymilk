@@ -13,10 +13,10 @@ layout (location = 1) in float a_radius;
 layout (location = 2) in float a_theta;
 layout (location = 3) in float a_ang_speed;
 layout (location = 4) in float a_mag;
-layout (location = 5) in float a_type;
+layout (location = 5) in float a_kind;
 
 out vec3 v_color;
-flat out float v_type;
+flat out float v_kind;
 
 float eccentricity(float rad_core, float rad_galaxy, float ex_inner, float ex_outer, float radius)
 {
@@ -49,13 +49,13 @@ void main()
     pos.y = (x * sin_r + y * cos_r) * scale;
 
     gl_Position = vec4(pos, 1.0);
-    if (a_type == 0.0) 
+    if (a_kind == 0.0) 
         gl_PointSize = 4.0 * a_mag;
-    else if (a_type == 1.0)
+    else if (a_kind == 1.0)
         gl_PointSize = 5.0 * 70.0 * a_mag;
     else
         gl_PointSize = 70.0 * a_mag;
 
     v_color = a_color * a_mag;
-    v_type = a_type;
+    v_kind  = a_kind;
 }
