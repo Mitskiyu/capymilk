@@ -1,8 +1,7 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 
-internal cm_state cm_init(wm_window *window) {
+internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window *window) {
     cm_state state = {0};
 
     state.seed     = (u32)time(NULL);
@@ -21,11 +20,10 @@ internal cm_state cm_init(wm_window *window) {
 
     i32 capacity = state.params.num_stars + state.params.num_dust * 2;
 
-    state.vertices = (glx_vertex *)malloc(capacity * sizeof(glx_vertex));
-    if (!state.vertices) return state;
+    state.vertices = PUSH_ARRAY_NZ(glx_arena, glx_vertex, capacity);
 
-    state.ui_render  = ui_renderer_create();
-    state.glx_render = glx_renderer_create(capacity);
+    state.ui_render  = ui_renderer_create(perm_arena);
+    state.glx_render = glx_renderer_create(perm_arena, capacity);
 
     glx_ct_build();
     glx_init(&state.params, state.vertices, state.seed);
@@ -58,7 +56,7 @@ internal void cm_draw(void *ctx) {
     r_window_present(state->window);
 }
 
-internal void cm_update(cm_state *state) {
+internal void cm_update(mem_arena *arena, cm_state *state) {
     b32 key_hit = false;
     if (WM_KEY_DOWN(state->window, 'Q')) { state->params.angular_offset += 0.00005f;   key_hit = true; }
     if (WM_KEY_DOWN(state->window, 'A')) { state->params.angular_offset -= 0.00005f;   key_hit = true; }
@@ -101,7 +99,9 @@ internal void cm_update(cm_state *state) {
 
     if (should_update) {
         i32 capacity = state->params.num_stars + state->params.num_dust * 2;
-        state->vertices = (glx_vertex*)realloc(state->vertices, capacity * sizeof(glx_vertex));
+
+        arena_clear(arena);
+        state->vertices = PUSH_ARRAY_NZ(arena, glx_vertex, capacity);
         glx_renderer_resize(&state->glx_render, capacity);
         glx_init(&state->params, state->vertices, state->seed);
         glx_renderer_upload(&state->glx_render, state->vertices, state->params.num_particles);

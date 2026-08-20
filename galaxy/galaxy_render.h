@@ -7,7 +7,7 @@ typedef struct {
     r_shader shader;
 } glx_renderer;
 
-internal glx_renderer glx_renderer_create(i32 n);
+internal glx_renderer glx_renderer_create(mem_arena *arena, i32 n);
 internal void glx_renderer_resize(glx_renderer *render, i32 n);
 internal void glx_renderer_draw(const glx_renderer *render, i32 n);
 internal void glx_renderer_upload(const glx_renderer *render, const glx_vertex *vertices, i32 n);

@@ -1,26 +1,24 @@
+#include <stdio.h>
 #include <stdlib.h>
 
-internal ui_renderer ui_renderer_create(void) {
+internal ui_renderer ui_renderer_create(mem_arena *arena) {
     ui_renderer render = {0};
 
     r_shader shader = {0};
     {
-        char *vert_source = plat_file_read("ui/quad.vs");
+        char *vert_source = plat_file_read(arena, "ui/quad.vs");
         if (vert_source == NULL) {
             printf("failed to load quad.vs\n");
             return render;
         }
 
-        char *frag_source = plat_file_read("ui/quad.fs");
+        char *frag_source = plat_file_read(arena, "ui/quad.fs");
         if (frag_source == NULL) {
             printf("failed to load quad.fs\n");
-            free(vert_source);
             return render;
         }
 
         shader = r_shader_alloc(vert_source, frag_source);
-        free(vert_source);
-        free(frag_source);
         if (shader.id == 0) return render;
     }
 

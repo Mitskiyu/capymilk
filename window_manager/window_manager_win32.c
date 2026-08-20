@@ -1,21 +1,16 @@
-#include <stdlib.h>
+#include "window_manager_win32.h"
 #include <windowsx.h>
 
-internal wm_window *wm_window_open(u32 w, u32 h, const char *title) {
-    wm_window *window = (wm_window *)calloc(1, sizeof(wm_window));
-    if (!window) return NULL;
+internal wm_window *wm_window_open(mem_arena *arena, u32 w, u32 h, const char *title) {
+    wm_window *window = PUSH_STRUCT(arena, wm_window);
 
-    window->plat_info = (_wm_plat_info *)calloc(1, sizeof(_wm_plat_info));
-    if (!window->plat_info) {
-        free(window); 
-        return NULL; 
-    }
+    window->plat_info = PUSH_STRUCT(arena, _wm_plat_info);
 
     HINSTANCE mod_handle = GetModuleHandle(NULL);
 
     const wchar_t *class_name = L"CAPYMILK";
     int len = MultiByteToWideChar(CP_UTF8, 0, title, -1, NULL, 0);
-    wchar_t *wide = malloc(len * sizeof(wchar_t));
+    wchar_t *wide = PUSH_ARRAY(arena, wchar_t, len); // want temp arena
     MultiByteToWideChar(CP_UTF8, 0, title, -1, wide, len);
 
     WNDCLASSW wnd_class = {
@@ -26,22 +21,16 @@ internal wm_window *wm_window_open(u32 w, u32 h, const char *title) {
         .hCursor = LoadCursorW(0, IDC_ARROW)
     };
     if (!RegisterClassW(&wnd_class)) { 
-        free(window->plat_info); 
-        free(window); 
-        free(wide); 
-        return NULL; 
-    }  // log
+        plat_fatal_err("failed to register window class", 1);
+    }
 
     HWND win_handle = CreateWindowExW(
         0, class_name, wide, WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
         CW_USEDEFAULT, w, h, NULL, NULL, mod_handle, NULL
     );
     if (!win_handle) {
-        free(window->plat_info); 
-        free(window); 
-        free(wide); 
-        return NULL; 
-    }  // log
+        plat_fatal_err("failed to create window", 1);
+    }
 
     window->width  = w;
     window->height = h;

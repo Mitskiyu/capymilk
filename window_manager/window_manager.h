@@ -40,7 +40,7 @@ typedef struct {
     b32 should_close;
 } wm_window;
 
-internal wm_window *wm_window_open(u32 w, u32 h, const char *title);
+internal wm_window *wm_window_open(mem_arena *arena, u32 w, u32 h, const char *title);
 internal void wm_window_process_events(wm_window *window);
 internal void wm_window_set_draw_callback(wm_window *window, wm_draw_fn fn, void *ctx);
 

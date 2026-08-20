@@ -40,13 +40,18 @@ internal void r_backend_init(void) {
         .hInstance = mod_handle,
         .lpszClassName = dummy_class_name
     };
-    if (!RegisterClassW(&dummy_wnd_class)) return;
+
+    if (!RegisterClassW(&dummy_wnd_class)) {
+        plat_fatal_err("failed to create dummy window class", 1);
+    }
 
     HWND dummy_wnd = CreateWindowW(
         dummy_class_name, L"", WS_TILEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
         CW_USEDEFAULT, CW_USEDEFAULT, NULL, NULL, mod_handle, NULL
     );
-    if (!dummy_wnd) return;
+    if (!dummy_wnd) {
+        plat_fatal_err("failed to create dummy window", 1);
+    }
 
     HDC dummy_dc = GetDC(dummy_wnd);
 
@@ -62,7 +67,10 @@ internal void r_backend_init(void) {
     SetPixelFormat(dummy_dc, pf, &pfd);
 
     HGLRC dummy_ctx = wglCreateContext(dummy_dc);
-    if (!dummy_ctx) return;
+    if (!dummy_ctx) {
+        plat_fatal_err("failed to create dummy window ctx", 1);
+    }
+
     wglMakeCurrent(dummy_dc, dummy_ctx);
 
     wglCreateContextAttribsARB = (_wglCreateContextAttribsARB_func*)
@@ -114,7 +122,10 @@ internal void r_window_equip(wm_window *window) {
         0
     };
     _w32gl_state.ctx = wglCreateContextAttribsARB(_w32gl_state.dc, NULL, ctx_attribs);
-    if (!_w32gl_state.ctx) return;
+    if (!_w32gl_state.ctx) {
+        plat_fatal_err("failed to create wgl ctx", 1);
+    }
+
     wglMakeCurrent(_w32gl_state.dc, _w32gl_state.ctx);
 
     glEnable(GL_PROGRAM_POINT_SIZE); // for galaxy

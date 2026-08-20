@@ -16,19 +16,20 @@
 
 int main(void) {
     plat_init();
+    mem_arena *perm_arena = arena_alloc(MiB(4), KiB(64));
+    mem_arena *glx_arena = arena_alloc(MiB(64), KiB(64));
 
-    wm_window *window = wm_window_open(1024, 1024, "Capymilk");
-    if (!window) return 1;
+    wm_window *window = wm_window_open(perm_arena, 1024, 1024, "Capymilk");
 
     r_backend_init();
     r_window_equip(window);
 
-    cm_state state = cm_init(window);
+    cm_state state = cm_init(perm_arena, glx_arena, window);
     wm_window_set_draw_callback(window, cm_draw, &state);
 
     while (!window->should_close) {
         wm_window_process_events(window);
-        cm_update(&state);
+        cm_update(glx_arena, &state);
         cm_draw(&state);
     }
 

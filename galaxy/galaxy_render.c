@@ -1,27 +1,23 @@
-#include <stdlib.h>
 #include <stdio.h>
 
-internal glx_renderer glx_renderer_create(i32 n) {
+internal glx_renderer glx_renderer_create(mem_arena *arena, i32 n) {
     glx_renderer render = {0};
 
     r_shader shader = {0};
     {
-        char *vert_source = plat_file_read("galaxy/points.vs");
+        char *vert_source = plat_file_read(arena, "galaxy/points.vs");
         if (vert_source == NULL) {
             printf("failed to load points.vs\n");
             return render;
         }
 
-        char *frag_source = plat_file_read("galaxy/points.fs");
+        char *frag_source = plat_file_read(arena, "galaxy/points.fs");
         if (frag_source == NULL) {
             printf("failed to load points.fs\n");
-            free(vert_source);
             return render;
         }
 
         shader = r_shader_alloc(vert_source, frag_source);
-        free(vert_source);
-        free(frag_source);
         if (shader.id == 0) return render;
     }
 

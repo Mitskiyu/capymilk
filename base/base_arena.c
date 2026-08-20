@@ -7,8 +7,11 @@ internal mem_arena *arena_alloc(u64 reserve_size, u64 commit_size) {
     mem_arena *arena = plat_mem_reserve(reserve_size);
 
     if (!plat_mem_commit(arena, commit_size)) {
-        plat_mem_release(arena, reserve_size);
-        return NULL; // fatal
+        arena = NULL;
+    }
+
+    if (arena == NULL) {
+        plat_fatal_err("failed to commit memory", 1);
     }
 
     arena->reserve_size = reserve_size;
@@ -32,7 +35,7 @@ internal void *arena_push(mem_arena *arena, u64 size, b32 non_zero) {
     u64 pos_aligned = ALIGN_UP_POW2(arena->pos, ARENA_ALIGN);
     u64 new_pos = pos_aligned + size;
 
-    if (new_pos > arena->reserve_size) { return NULL; } // fatal
+    if (new_pos > arena->reserve_size) { return NULL; }
 
     if (new_pos > arena->commit_pos) {
         u64 new_commit_pos = new_pos;

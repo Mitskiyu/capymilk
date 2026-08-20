@@ -11,8 +11,8 @@ typedef struct {
     ui_renderer  ui_render;
 } cm_state;
 
-internal cm_state cm_init(wm_window *window);
+internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window *window);
 internal void cm_draw(void *ctx);
-internal void cm_update(cm_state *state);
+internal void cm_update(mem_arena *arena, cm_state *state);
 
 #endif
