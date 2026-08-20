@@ -14,3 +14,27 @@ internal u64 plat_time_usec(void) {
     if (!QueryPerformanceCounter(&ticks)) return 0;
     return (u64)ticks.QuadPart * 1000000 / _w32_perf_freq;
 }
+
+// returns NULL on failure
+internal void *plat_mem_reserve(u64 size) {
+    return VirtualAlloc(0, size, MEM_RESERVE, PAGE_READWRITE);
+}
+
+internal b32 plat_mem_commit(void *mem, u64 size) {
+    void *ret = VirtualAlloc(mem, size, MEM_COMMIT, PAGE_READWRITE);
+    return ret != NULL;
+}
+
+internal b32 plat_mem_release(void *mem, u64 size) {
+    return VirtualFree(mem, size, MEM_RELEASE);
+}
+
+internal b32 plat_mem_decommit(void *mem, u64 size) {
+    return VirtualFree(mem, size, MEM_FREE);
+}
+
+u32 plat_page_size(void) {
+    SYSTEM_INFO si = { 0 };
+    GetSystemInfo(&si);
+    return si.dwPageSize;
+}
