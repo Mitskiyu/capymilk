@@ -28,7 +28,7 @@ internal u64 arena_get_pos(mem_arena *arena) {
     return arena->pos;
 }
 
-internal void *arena_push(mem_arena *arena, u64 size) {
+internal void *arena_push(mem_arena *arena, u64 size, b32 non_zero) {
     u64 pos_aligned = ALIGN_UP_POW2(arena->pos, ARENA_ALIGN);
     u64 new_pos = pos_aligned + size;
 
@@ -44,7 +44,6 @@ internal void *arena_push(mem_arena *arena, u64 size) {
 
         u8 *commit_ptr = (u8*)arena + arena->commit_pos;
 
-        // grow
         if (!plat_mem_commit(commit_ptr, commit_size)) { return NULL; } // fatal
 
         arena->commit_pos = new_commit_pos;
@@ -52,6 +51,10 @@ internal void *arena_push(mem_arena *arena, u64 size) {
 
     arena->pos = new_pos;
     u8* out = (u8*)arena + pos_aligned;
+
+    if (!non_zero) {
+        memset(out, 0, size);
+    }
 
     return out;
 }
