@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <winuser.h>
 
 global u64 _w32_perf_freq = 1;
 
@@ -7,6 +8,11 @@ internal void plat_init(void) {
     if (QueryPerformanceFrequency(&freq)) {
         _w32_perf_freq = (u64)freq.QuadPart;
     }
+}
+
+internal void plat_fatal_err(const char *msg, i32 code) {
+    MessageBoxA(NULL, msg, "Error", MB_OK | MB_ICONERROR);
+    ExitProcess((u32)code);
 }
 
 internal u64 plat_time_usec(void) {
