@@ -51,7 +51,7 @@ internal void cm_draw(void *ctx) {
 
     glx_renderer_update(&state->glx_render, &state->params, elapsed_years, aspect_ratio);
     glx_renderer_draw(&state->glx_render, state->params.num_particles);
-    ui_renderer_draw(&state->ui_render, 0.0f, 0.0f, 0.5f, 0.5f, (vec3){1,0,0});
+    // ui_renderer_draw(&state->ui_render, 4.0f, 0.0f, 0.5f, 0.5f, (vec3){1,0,0});
 
     r_window_present(state->window);
 }
