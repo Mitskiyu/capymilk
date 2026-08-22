@@ -39,7 +39,7 @@ internal b32 plat_mem_decommit(void *mem, u64 size) {
     return VirtualFree(mem, size, MEM_FREE);
 }
 
-u32 plat_page_size(void) {
+internal u32 plat_page_size(void) {
     SYSTEM_INFO si = { 0 };
     GetSystemInfo(&si);
     return si.dwPageSize;
