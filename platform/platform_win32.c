@@ -36,7 +36,7 @@ internal b32 plat_mem_release(void *mem, u64 size) {
 }
 
 internal b32 plat_mem_decommit(void *mem, u64 size) {
-    return VirtualFree(mem, size, MEM_FREE);
+    return VirtualFree(mem, size, MEM_DECOMMIT);
 }
 
 internal u32 plat_page_size(void) {
