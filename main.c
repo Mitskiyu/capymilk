@@ -17,7 +17,7 @@
 int main(void) {
     plat_init();
     mem_arena *perm_arena = arena_alloc(MiB(4), KiB(64));
-    mem_arena *glx_arena = arena_alloc(MiB(64), KiB(64));
+    mem_arena *glx_arena = arena_alloc(GiB(5), KiB(64));
 
     wm_window *window = wm_window_open(perm_arena, 1024, 1024, "Capymilk");
 
