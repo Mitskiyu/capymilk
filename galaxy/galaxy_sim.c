@@ -198,8 +198,9 @@ internal f32 glx_mass_disc(f32 rad_core, f32 r) {
 internal f32 glx_mass_halo(f32 rad_glx, f32 r) {
     f32 halo_falloff = rad_glx / 6.0f;
     f32 halo_density_center = 0.15f;
+    f32 x = r / halo_falloff;
 
-    return halo_density_center * (1.0f / (1.0f + powf(r / halo_falloff, 2.0f))) * (4.0f * PI * powf(r, 3.0f) / 3.0f);
+    return halo_density_center * (1.0f / (1.0f + x * x)) * (4.0f * PI * r * r * r / 3.0f);
 }
 
 internal f32 glx_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r) {
