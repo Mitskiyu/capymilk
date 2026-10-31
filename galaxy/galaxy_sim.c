@@ -220,10 +220,10 @@ internal void glx_advance(glx_params *params, f32 dt) {
 }
 
 internal void glx_init(glx_params *params, glx_vertex *vertices, u32 seed) {
-    srand(seed);
     f32 radii[CDF_POINTS], cumulative[CDF_POINTS], inverse[CDF_POINTS];
     glx_cdf_build(radii, cumulative, inverse, params->rad_core, params->rad_galaxy);
 
+    srand(seed);
     f32 rand_scale = 1.0f / RAND_MAX;
     for (i32 i = 0; i < params->num_stars; i++) {
         f32 radius = glx_cdf_sample(inverse, rand() * rand_scale);
@@ -243,6 +243,7 @@ internal void glx_init(glx_params *params, glx_vertex *vertices, u32 seed) {
         vertices[i].kind = 0.0f;
     }
 
+    srand(seed + 1);
     for (i32 i = 0; i < params->num_dust; i++) {
         i32 idx = params->num_stars + i;
         f32 radius;
@@ -272,6 +273,7 @@ internal void glx_init(glx_params *params, glx_vertex *vertices, u32 seed) {
         vertices[idx].kind = 1.0f;
     }
 
+    srand(seed + 2);
     i32 idx = params->num_stars + params->num_dust;
     for (i32 i = 0; i < params->num_dust / 100; i++) {
         f32 x = 2 * params->rad_galaxy * (rand() * rand_scale) - params->rad_galaxy;
