@@ -20,6 +20,7 @@ typedef struct {
     f32 ex_inner;
     f32 ex_outer;
     f32 angular_offset;
+    f32 elapsed_years;
 } glx_params;
 
 #endif

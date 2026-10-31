@@ -32,6 +32,7 @@ internal f32 glx_mass_disc(f32 rad_core, f32 r);
 internal f32 glx_mass_halo(f32 rad_galaxy, f32 r);
 internal f32 glx_velocity_kms(f32 rad_core, f32 rad_galaxy, f32 r);
 internal f32 glx_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r);
+internal void glx_advance(glx_params *params, f32 dt);
 internal void glx_init(glx_params *glx, glx_vertex *vertices, u32 seed);
 
 #endif

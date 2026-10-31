@@ -25,12 +25,13 @@ int main(void) {
     r_window_equip(window);
 
     cm_state state = cm_init(perm_arena, glx_arena, window);
-    wm_window_set_draw_callback(window, cm_draw, &state);
+    wm_window_set_draw_callback(window, cm_redraw, &state);
 
     while (!window->should_close) {
         wm_window_process_events(window);
-        cm_update(glx_arena, &state);
-        cm_draw(&state);
+        f32 dt = cm_tick(&state);
+        cm_update(glx_arena, &state, dt);
+        cm_draw(&state, dt);
     }
 
     return 0;

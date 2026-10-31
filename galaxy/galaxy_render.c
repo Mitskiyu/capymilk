@@ -48,9 +48,9 @@ internal void glx_renderer_upload(const glx_renderer *render, const glx_vertex *
     r_buffer_upload(render->vbo, sizeof(glx_vertex) * n, vertices);
 }
 
-internal void glx_renderer_update(const glx_renderer *render, const glx_params *params, f32 elapsed_years, f32 aspect_ratio) {
+internal void glx_renderer_update(const glx_renderer *render, const glx_params *params, f32 aspect_ratio) {
     r_uniform_f32(render->shader, "u_aspect_ratio",   aspect_ratio);
-    r_uniform_f32(render->shader, "u_elapsed_years",  elapsed_years);
+    r_uniform_f32(render->shader, "u_elapsed_years",  params->elapsed_years);
     r_uniform_f32(render->shader, "u_ex_inner",       params->ex_inner);
     r_uniform_f32(render->shader, "u_ex_outer",       params->ex_outer);
     r_uniform_f32(render->shader, "u_rad_core",       params->rad_core);

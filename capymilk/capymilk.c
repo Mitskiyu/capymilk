@@ -34,61 +34,32 @@ internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window
     return state;
 }
 
-internal void cm_draw(void *ctx) {
-    cm_state *state = (cm_state*)ctx;
-
-    local_persist u64 acc_frame_us = 0, acc_gpu_ns = 0;
-    local_persist u32 frames = 0;
-
-    local_persist u64 last_frame_us = 0;
-    local_persist f32 elapsed_years = 0.0f;
-
-
+internal f32 cm_tick(cm_state *state) {
     u64 now_us = plat_time_usec();
-    if (last_frame_us == 0) last_frame_us = now_us;
-    u64 frame_us = now_us - last_frame_us;
+    if (state->last_frame_us == 0) state->last_frame_us = now_us;
+    f32 dt = (now_us - state->last_frame_us) / 1000000.0f;
+    state->last_frame_us = now_us;
 
-    f32 dt_sec = (now_us - last_frame_us) / 1000000.0f;
-    elapsed_years += dt_sec * state->params.time_scale;
-    last_frame_us = now_us;
-
-    f32 aspect_ratio = (f32)state->window->width / state->window->height;
-
-    r_clear((vec3){0, 0, 0});
-    r_viewport(state->window->width, state->window->height);
-
-    glx_renderer_update(&state->glx_render, &state->params, elapsed_years, aspect_ratio);
-
-    r_timer_begin(state->timer);
-    glx_renderer_draw(&state->glx_render, state->params.num_particles);
-    r_timer_end();
-    r_window_present(state->window);
-    // ui_renderer_draw(&state->ui_render, 4.0f, 0.0f, 0.5f, 0.5f, (vec3){1,0,0});
-
-    acc_gpu_ns += r_timer_result_ns(state->timer);
-    acc_frame_us += frame_us;
-    if (++frames == 500) {
-        printf("particles %d | frame %.2f ms | gpu %.2f ms\n",
-            state->params.num_particles,
-            acc_frame_us / 1000.0 / frames, acc_gpu_ns / 1e6 / frames);
-        acc_frame_us = acc_gpu_ns = frames = 0;
-    }
+    glx_advance(&state->params, dt);
+    return dt;
 }
 
-internal void cm_update(mem_arena *arena, cm_state *state) {
+internal void cm_update(mem_arena *arena, cm_state *state, f32 dt) {
+    glx_params *p = &state->params;
     b32 key_hit = false;
-    if (WM_KEY_DOWN(state->window, 'Q')) { state->params.angular_offset += 0.00005f;   key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'A')) { state->params.angular_offset -= 0.00005f;   key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'W')) { state->params.ex_inner       += 0.02f;      key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'S')) { state->params.ex_inner       -= 0.02f;      key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'E')) { state->params.ex_outer       += 0.02f;      key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'D')) { state->params.ex_outer       -= 0.02f;      key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'R')) { state->params.time_scale     += 1000000.0f; key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'F')) { state->params.time_scale     -= 1000000.0f; key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'U')) { state->params.rad_core       += 100.0f;     key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'J')) { state->params.rad_core       -= 100.0f;     key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'I')) { state->params.rad_galaxy     += 100.0f;     key_hit = true; }
-    if (WM_KEY_DOWN(state->window, 'K')) { state->params.rad_galaxy     -= 100.0f;     key_hit = true; }
+
+    if (WM_KEY_DOWN(state->window, 'Q')) { p->angular_offset += 0.0002f * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'A')) { p->angular_offset -= 0.0002f * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'W')) { p->ex_inner       += 0.1f    * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'S')) { p->ex_inner       -= 0.1f    * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'E')) { p->ex_outer       += 0.1f    * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'D')) { p->ex_outer       -= 0.1f    * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'R')) { p->time_scale     *= powf(2.0f, dt); key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'F')) { p->time_scale     /= powf(2.0f, dt); key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'U')) { p->rad_core       += 1000.0f * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'J')) { p->rad_core       -= 1000.0f * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'I')) { p->rad_galaxy     += 2000.0f * dt;   key_hit = true; }
+    if (WM_KEY_DOWN(state->window, 'K')) { p->rad_galaxy     -= 2000.0f * dt;   key_hit = true; }
 
     b32 should_update = false;
     if (WM_KEY_DOWN(state->window, 'T')) {
@@ -132,4 +103,36 @@ internal void cm_update(mem_arena *arena, cm_state *state) {
             state->params.time_scale,     state->params.num_stars, state->params.num_dust,
             state->params.rad_core,       state->params.rad_galaxy);
     }
+}
+
+internal void cm_draw(cm_state *state, f32 dt) {
+    local_persist u64 acc_frame_us = 0, acc_gpu_ns = 0;
+    local_persist u32 frames = 0;
+
+    f32 aspect_ratio = (f32)state->window->width / state->window->height;
+
+    r_clear((vec3){0, 0, 0});
+    r_viewport(state->window->width, state->window->height);
+
+    glx_renderer_update(&state->glx_render, &state->params, aspect_ratio);
+
+    r_timer_begin(state->timer);
+    glx_renderer_draw(&state->glx_render, state->params.num_particles);
+    r_timer_end();
+    r_window_present(state->window);
+    // ui_renderer_draw(&state->ui_render, 4.0f, 0.0f, 0.5f, 0.5f, (vec3){1,0,0});
+
+    acc_gpu_ns += r_timer_result_ns(state->timer);
+    acc_frame_us += (u64)(dt * 1000000.0f);
+    if (++frames == 500) {
+        printf("particles %d | frame %.2f ms | gpu %.2f ms\n",
+            state->params.num_particles,
+            acc_frame_us / 1000.0 / frames, acc_gpu_ns / 1e6 / frames);
+        acc_frame_us = acc_gpu_ns = frames = 0;
+    }
+}
+
+internal void cm_redraw(void *ctx) {
+    cm_state *state = (cm_state *)ctx;
+    cm_draw(state, cm_tick(state));
 }

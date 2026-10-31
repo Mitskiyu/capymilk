@@ -215,6 +215,10 @@ internal f32 glx_orbital_velocity(f32 rad_core, f32 rad_galaxy, f32 r) {
     return (360.0f / time) * (PI / 180.0f);
 }
 
+internal void glx_advance(glx_params *params, f32 dt) {
+    params->elapsed_years += dt * params->time_scale;
+}
+
 internal void glx_init(glx_params *params, glx_vertex *vertices, u32 seed) {
     srand(seed);
     f32 radii[CDF_POINTS], cumulative[CDF_POINTS], inverse[CDF_POINTS];
