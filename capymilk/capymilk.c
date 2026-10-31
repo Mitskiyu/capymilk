@@ -1,25 +1,26 @@
 #include <stdio.h>
 #include <time.h>
 
+global const glx_params cm_defaults = {
+    .num_stars      = 60000,
+    .num_dust       = 60000,
+    .rad_core       = 6000.0f,
+    .rad_galaxy     = 15000.0f,
+    .time_scale     = 10000000.0f,
+    .ex_inner       = 0.8f,
+    .ex_outer       = 1.0f,
+    .angular_offset = -0.0004f,
+};
+
 internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window *window) {
     cm_state state = {0};
 
     state.seed     = (u32)time(NULL);
     state.start_us = plat_time_usec();
     state.window   = window;
-    state.params   = (glx_params){
-        .num_stars      = 60000,
-        .num_dust       = 60000,
-        .rad_core       = 6000.0f,
-        .rad_galaxy     = 15000.0f,
-        .time_scale     = 10000000.0f,
-        .ex_inner       = 0.8f,
-        .ex_outer       = 1.0f,
-        .angular_offset = -0.0004f,
-    };
+    state.params   = cm_defaults;
 
     i32 capacity = state.params.num_stars + state.params.num_dust * 2;
-
     state.vertices = PUSH_ARRAY_NZ(glx_arena, glx_vertex, capacity);
 
     state.ui_render  = ui_renderer_create(perm_arena);
@@ -60,6 +61,7 @@ internal void cm_update(mem_arena *arena, cm_state *state, f32 dt) {
     if (WM_KEY_DOWN(state->window, 'J')) { p->rad_core       -= 1000.0f * dt;   key_hit = true; }
     if (WM_KEY_DOWN(state->window, 'I')) { p->rad_galaxy     += 2000.0f * dt;   key_hit = true; }
     if (WM_KEY_DOWN(state->window, 'K')) { p->rad_galaxy     -= 2000.0f * dt;   key_hit = true; }
+    
 
     b32 should_update = false;
     if (WM_KEY_DOWN(state->window, 'T')) {
@@ -85,6 +87,14 @@ internal void cm_update(mem_arena *arena, cm_state *state, f32 dt) {
             state->params.num_dust = 0;
         key_hit = true;
         should_update = true;
+    }
+    if (WM_KEY_DOWN(state->window, ' ')) {
+        glx_params old = *p;
+        *p = cm_defaults;
+        p->elapsed_years = old.elapsed_years;
+        p->num_particles = old.num_particles;
+        should_update = p->num_stars != old.num_stars || p->num_dust != old.num_dust;
+        key_hit = true;
     }
 
     if (should_update) {
