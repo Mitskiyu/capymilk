@@ -1,16 +1,16 @@
-
-# Capymilk
-
-Real-time spiral galaxy renderer built from scratch in C
-
-https://github.com/user-attachments/assets/c8d23190-90cb-46a2-afc5-27a9631d5a25
+<p align="center">
+  <img width="420" alt="Capymilk" src="https://github.com/user-attachments/assets/3de32db1-afdc-46a8-95b3-dab84185999a" />
+</p>
+<h1 align="center">Capymilk</h1>
+<p align="center">
+  Real-time spiral galaxy renderer in C and OpenGL, with no engine or libraries<br>
+</p>
 
 ## Build
 ```
-# from a shell with msvc attached
-build.bat
-
-build\main.exe # make sure to run from root dir
+# from a shell with MSVC attached
+build.bat release
+build\main.exe   # run from root
 ```
 
 ## Controls
@@ -25,23 +25,19 @@ build\main.exe # make sure to run from root dir
 | I/K | galaxy radius |
 | T/G | star count |
 | Y/H | dust count |
+| Space | reset |
 
 ## Layers
-- `base`
-    - types, macros, math, arena allocator
-- `platform` (`plat_`)
-    - files, time, memory reservation; os-dependent
-- `window_manager` (`wm_`)
-    - window creation, input, message loop; os-dependent
-- `render` (`r_`)
-    - gpu resources and drawing; implemented per-backend
-- `galaxy` (`glx_`)
-    - particle simulation + renderer
-- `ui`
-    - quad drawing (stub)
-- `capymilk` (`cm_`)
-    - app state and frame loop
+
+| Layer | Prefix | Purpose |
+|-------|--------|---------|
+| `base` | | types, macros, math, arena allocator |
+| `platform` | `plat_` | files, time, memory reservation |
+| `window_manager` | `wm_` | window creation, input, message loop |
+| `render` | `r_` | GPU resources and drawing, per backend |
+| `galaxy` | `glx_` | particle simulation and renderer |
+| `capymilk` | `cm_` | app state and frame loop |
 
 ## Credit
-[beltoforion's article](https://beltoforion.de/en/spiral_galaxy_renderer/) was used for implementing the simulation model
 
+[Beltoforion's](https://beltoforion.de/en/spiral_galaxy_renderer/) article was the basis for the simulation model
