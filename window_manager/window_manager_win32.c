@@ -24,9 +24,13 @@ internal wm_window *wm_window_open(mem_arena *arena, u32 w, u32 h, const char *t
         plat_fatal_err("failed to register window class", 1);
     }
 
+    RECT rect = { 0, 0, w, h };
+    AdjustWindowRectEx(&rect, WS_TILEDWINDOW, FALSE, 0);
+    i32 win_w = rect.right - rect.left;
+    i32 win_h = rect.bottom - rect.top;
     HWND win_handle = CreateWindowExW(
         0, class_name, wide, WS_TILEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
-        CW_USEDEFAULT, w, h, NULL, NULL, mod_handle, NULL
+        CW_USEDEFAULT, win_w, win_h, NULL, NULL, mod_handle, NULL
     );
     if (!win_handle) {
         plat_fatal_err("failed to create window", 1);
