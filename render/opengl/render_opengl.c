@@ -260,3 +260,23 @@ internal void r_draw_indexed(r_layout layout, i32 n) {
     glBindVertexArray(layout.id);
     glDrawElements(GL_TRIANGLES, n, GL_UNSIGNED_INT, 0);
 }
+
+internal r_timer r_timer_alloc(void) {
+    r_timer t = {0};
+    glCreateQueries(GL_TIME_ELAPSED, 1, &t.id);
+    return t;
+}
+
+internal void r_timer_begin(r_timer t) {
+    glBeginQuery(GL_TIME_ELAPSED, t.id);
+}
+
+internal void r_timer_end(void) {
+    glEndQuery(GL_TIME_ELAPSED);
+}
+
+internal u64 r_timer_result_ns(r_timer t) {
+    GLuint64 ns = 0;
+    glGetQueryObjectui64v(t.id, GL_QUERY_RESULT, &ns);
+    return ns;
+}

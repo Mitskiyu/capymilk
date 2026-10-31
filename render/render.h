@@ -5,6 +5,7 @@ typedef struct { u32 id; } r_shader;
 typedef struct { u32 id; } r_buffer;
 typedef struct { u32 id; } r_layout;
 typedef struct { u32 count; } r_attrib;
+typedef struct { u32 id; } r_timer;
 
 typedef enum {
     r_buffer_static,
@@ -35,5 +36,10 @@ internal void r_viewport(u32 width, u32 height);
 
 internal void r_draw_points(r_layout layout, i32 n);
 internal void r_draw_indexed(r_layout layout, i32 n);
+
+internal r_timer r_timer_alloc(void);
+internal void r_timer_begin(r_timer t);
+internal void r_timer_end(void);
+internal u64 r_timer_result_ns(r_timer t);
 
 #endif

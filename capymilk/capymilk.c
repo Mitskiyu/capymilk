@@ -25,6 +25,8 @@ internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window
     state.ui_render  = ui_renderer_create(perm_arena);
     state.glx_render = glx_renderer_create(perm_arena, capacity);
 
+    state.timer = r_timer_alloc();
+
     glx_ct_build();
     glx_init(&state.params, state.vertices, state.seed);
     glx_renderer_upload(&state.glx_render, state.vertices, state.params.num_particles);
@@ -34,11 +36,17 @@ internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window
 
 internal void cm_draw(void *ctx) {
     cm_state *state = (cm_state*)ctx;
+
+    local_persist u64 acc_frame_us = 0, acc_gpu_ns = 0;
+    local_persist u32 frames = 0;
+
     local_persist u64 last_frame_us = 0;
     local_persist f32 elapsed_years = 0.0f;
 
+
     u64 now_us = plat_time_usec();
     if (last_frame_us == 0) last_frame_us = now_us;
+    u64 frame_us = now_us - last_frame_us;
 
     f32 dt_sec = (now_us - last_frame_us) / 1000000.0f;
     elapsed_years += dt_sec * state->params.time_scale;
@@ -50,10 +58,21 @@ internal void cm_draw(void *ctx) {
     r_viewport(state->window->width, state->window->height);
 
     glx_renderer_update(&state->glx_render, &state->params, elapsed_years, aspect_ratio);
+
+    r_timer_begin(state->timer);
     glx_renderer_draw(&state->glx_render, state->params.num_particles);
+    r_timer_end();
+    r_window_present(state->window);
     // ui_renderer_draw(&state->ui_render, 4.0f, 0.0f, 0.5f, 0.5f, (vec3){1,0,0});
 
-    r_window_present(state->window);
+    acc_gpu_ns += r_timer_result_ns(state->timer);
+    acc_frame_us += frame_us;
+    if (++frames == 500) {
+        printf("particles %d | frame %.2f ms | gpu %.2f ms\n",
+            state->params.num_particles,
+            acc_frame_us / 1000.0 / frames, acc_gpu_ns / 1e6 / frames);
+        acc_frame_us = acc_gpu_ns = frames = 0;
+    }
 }
 
 internal void cm_update(mem_arena *arena, cm_state *state) {

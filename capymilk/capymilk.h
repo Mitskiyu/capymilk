@@ -9,6 +9,7 @@ typedef struct {
     glx_vertex  *vertices;
     glx_renderer glx_render;
     ui_renderer  ui_render;
+    r_timer      timer;
 } cm_state;
 
 internal cm_state cm_init(mem_arena *perm_arena, mem_arena *glx_arena, wm_window *window);

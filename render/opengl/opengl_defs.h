@@ -12,6 +12,7 @@ typedef float         GLfloat;
 typedef char          GLchar;
 typedef intptr_t      GLsizeiptr;
 typedef intptr_t      GLintptr;
+typedef uint64_t      GLuint64;
 
 #define GL_FALSE               0
 #define GL_TRIANGLES           0x0004
@@ -22,6 +23,8 @@ typedef intptr_t      GLintptr;
 #define GL_VERTEX_SHADER       0x8B31
 #define GL_COMPILE_STATUS      0x8B81
 #define GL_LINK_STATUS         0x8B82
+#define GL_QUERY_RESULT        0x8866
+#define GL_TIME_ELAPSED        0x88BF
 
 // https://registr.khronos.org/OpenGL/api/GL/glext.h
 
